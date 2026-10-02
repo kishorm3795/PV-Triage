@@ -1,0 +1,126 @@
+{
+  "$defs": {
+    "Outcome": {
+      "enum": [
+        "recovered",
+        "recovering",
+        "not_recovered",
+        "fatal",
+        "unknown",
+        "recovered_with_sequelae"
+      ],
+      "title": "Outcome",
+      "type": "string"
+    },
+    "PatientSex": {
+      "enum": [
+        "male",
+        "female",
+        "other",
+        "unknown"
+      ],
+      "title": "PatientSex",
+      "type": "string"
+    },
+    "ReporterType": {
+      "enum": [
+        "physician",
+        "pharmacist",
+        "other_hcp",
+        "consumer",
+        "patient"
+      ],
+      "title": "ReporterType",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Adverse drug reaction report submitted to the pharmacovigilance triage service.",
+  "properties": {
+    "report_id": {
+      "description": "Unique report identifier.",
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Report Id",
+      "type": "string"
+    },
+    "reporter_type": {
+      "$ref": "#/$defs/ReporterType",
+      "description": "Role or profession of the adverse event reporter."
+    },
+    "patient_age": {
+      "anyOf": [
+        {
+          "maximum": 120,
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Patient age in years at reaction onset (0-120).",
+      "title": "Patient Age"
+    },
+    "patient_sex": {
+      "$ref": "#/$defs/PatientSex",
+      "description": "Patient biological sex or gender classification."
+    },
+    "suspect_drug": {
+      "description": "Name of the suspect active drug substance or medicinal product.",
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Suspect Drug",
+      "type": "string"
+    },
+    "drug_start_date": {
+      "description": "Date when the patient began taking the suspect drug (YYYY-MM-DD).",
+      "format": "date",
+      "title": "Drug Start Date",
+      "type": "string"
+    },
+    "event_date": {
+      "description": "Date of onset of the adverse event (YYYY-MM-DD).",
+      "format": "date",
+      "title": "Event Date",
+      "type": "string"
+    },
+    "reaction_description": {
+      "description": "Detailed description of the adverse reaction (max 2000 characters).",
+      "maxLength": 2000,
+      "minLength": 1,
+      "title": "Reaction Description",
+      "type": "string"
+    },
+    "outcome": {
+      "$ref": "#/$defs/Outcome",
+      "description": "Clinical outcome of the adverse drug reaction."
+    },
+    "narrative": {
+      "anyOf": [
+        {
+          "maxLength": 5000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Optional clinical narrative, laboratory findings, or medical history.",
+      "title": "Narrative"
+    }
+  },
+  "required": [
+    "reporter_type",
+    "patient_sex",
+    "suspect_drug",
+    "drug_start_date",
+    "event_date",
+    "reaction_description",
+    "outcome"
+  ],
+  "title": "AdverseEventReport",
+  "type": "object"
+}
