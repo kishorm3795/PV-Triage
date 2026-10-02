@@ -1,0 +1,32 @@
+# Environment variables
+.env
+
+# Python cache & virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Chroma & index directories
+chroma/
+*/chroma/
+chroma_db/
+data/chroma/
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# Node / frontend
+node_modules/
+
+# OS artifacts
+.DS_Store
+Thumbs.db
