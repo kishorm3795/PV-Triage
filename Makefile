@@ -13,16 +13,16 @@ help:
 	@echo "  make clean-clone-test - Run end-to-end verification from fresh clone"
 
 up:
-	@echo "not implemented yet"
+	docker compose up -d --build
 
 down:
-	@echo "not implemented yet"
+	docker compose down
 
 logs:
-	@echo "not implemented yet"
+	docker compose logs -f
 
 test:
-	@echo "not implemented yet"
+	python3.11 -m pytest api/tests/ -v
 
 ingest:
 	@echo "not implemented yet"

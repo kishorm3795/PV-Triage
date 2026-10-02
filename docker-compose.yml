@@ -1,0 +1,78 @@
+services:
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+      start_period: 2s
+
+  stub-llm:
+    build:
+      context: .
+      dockerfile: stub_llm/Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - STUB_DELAY_MS=${STUB_DELAY_MS:-50}
+      - STUB_FAIL=${STUB_FAIL:-false}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+      start_period: 2s
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    ports:
+      - "8000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+      stub-llm:
+        condition: service_healthy
+    environment:
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - LLM_PROVIDER=${LLM_PROVIDER:-stub}
+      - LLM_BASE_URL=${LLM_BASE_URL:-http://stub-llm:8001}
+      - PROMPT_VERSION=${PROMPT_VERSION:-v1}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
+
+  worker:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    # Scalable: no container_name and no fixed host port mapping
+    depends_on:
+      redis:
+        condition: service_healthy
+      stub-llm:
+        condition: service_healthy
+    environment:
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - LLM_PROVIDER=${LLM_PROVIDER:-stub}
+      - LLM_BASE_URL=${LLM_BASE_URL:-http://stub-llm:8001}
+      - PROMPT_VERSION=${PROMPT_VERSION:-v1}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import redis, os; r = redis.from_url(os.getenv('REDIS_URL', 'redis://redis:6379/0')); r.ping()"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
+
+volumes:
+  redis_data:
