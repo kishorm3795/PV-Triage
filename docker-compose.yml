@@ -29,6 +29,33 @@ services:
       retries: 5
       start_period: 2s
 
+  jaeger:
+    image: jaegertracing/all-in-one:1.60
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:16686/"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+      start_period: 2s
+
+  ingest:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    command: python -m pipeline ingest
+    environment:
+      - CHROMA_DIR=${CHROMA_DIR:-/app/data/chroma}
+      - EMBED_MODEL=${EMBED_MODEL:-all-MiniLM-L6-v2}
+    volumes:
+      - ./corpus:/app/corpus:ro
+      - chroma_data:/app/data/chroma
+
   api:
     build:
       context: .
@@ -40,11 +67,17 @@ services:
         condition: service_healthy
       stub-llm:
         condition: service_healthy
+      ingest:
+        condition: service_completed_successfully
     environment:
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - LLM_PROVIDER=${LLM_PROVIDER:-stub}
       - LLM_BASE_URL=${LLM_BASE_URL:-http://stub-llm:8001}
       - PROMPT_VERSION=${PROMPT_VERSION:-v1}
+      - CHROMA_DIR=${CHROMA_DIR:-/app/data/chroma}
+      - OTLP_ENDPOINT=${OTLP_ENDPOINT:-http://jaeger:4317}
+    volumes:
+      - chroma_data:/app/data/chroma:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 3s
@@ -62,17 +95,46 @@ services:
         condition: service_healthy
       stub-llm:
         condition: service_healthy
+      ingest:
+        condition: service_completed_successfully
     environment:
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - LLM_PROVIDER=${LLM_PROVIDER:-stub}
       - LLM_BASE_URL=${LLM_BASE_URL:-http://stub-llm:8001}
       - PROMPT_VERSION=${PROMPT_VERSION:-v1}
+      - CHROMA_DIR=${CHROMA_DIR:-/app/data/chroma}
+      - OTLP_ENDPOINT=${OTLP_ENDPOINT:-http://jaeger:4317}
+      - METRICS_PORT=8002
+    volumes:
+      - chroma_data:/app/data/chroma:ro
+      - ./corpus:/app/corpus:ro
     healthcheck:
-      test: ["CMD", "python", "-c", "import redis, os; r = redis.from_url(os.getenv('REDIS_URL', 'redis://redis:6379/0')); r.ping()"]
+      test: ["CMD", "python", "-c", "import urllib.request, redis, os; urllib.request.urlopen('http://localhost:8002/metrics'); redis.from_url(os.getenv('REDIS_URL', 'redis://redis:6379/0')).ping()"]
       interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
+
+  prometheus:
+    image: prom/prometheus:v2.54.0
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 3s
       timeout: 3s
       retries: 5
       start_period: 3s
 
 volumes:
   redis_data:
+  chroma_data:

@@ -7,6 +7,7 @@ import logging
 import os
 import time
 from typing import Any
+from prometheus_client import Counter, Histogram
 import redis
 
 # NOTE: When Member B merges, swap this single import:
@@ -19,6 +20,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger("worker.tasks")
 
+JOB_COUNTER = Counter(
+    "worker_jobs_processed_total",
+    "Total jobs processed by worker task execution",
+    ["status"],
+)
+JOB_DURATION = Histogram(
+    "worker_task_duration_seconds",
+    "Task processing duration in seconds",
+)
+
 
 def get_redis_client() -> redis.Redis:
     redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
@@ -27,6 +38,7 @@ def get_redis_client() -> redis.Redis:
 
 def process_triage_job(run_id: str, report_data: dict[str, Any]) -> dict[str, Any]:
     """Execute triage graph for an adverse event report."""
+    start_time = time.time()
     r = get_redis_client()
     extra = {"correlation_id": run_id}
     logger.info("Picking up job %s from queue", run_id, extra=extra)
@@ -50,14 +62,23 @@ def process_triage_job(run_id: str, report_data: dict[str, Any]) -> dict[str, An
                 json.dumps([t.model_dump() for t in run_result.trace]),
             )
 
+        duration = time.time() - start_time
+        JOB_COUNTER.labels(status=run_result.status).inc()
+        JOB_DURATION.observe(duration)
+
         logger.info(
-            "Triage run %s finished successfully with status %s",
+            "Triage run %s finished successfully with status %s (%.2fs)",
             run_id,
             run_result.status,
+            duration,
             extra=extra,
         )
         return result_dict
     except Exception as exc:
+        duration = time.time() - start_time
+        JOB_COUNTER.labels(status="failed").inc()
+        JOB_DURATION.observe(duration)
+
         logger.exception("Triage job %s failed: %s", run_id, exc, extra=extra)
         r.set(f"run:{run_id}:state", "failed")
         r.set(f"run:{run_id}:error", str(exc))

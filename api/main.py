@@ -111,24 +111,33 @@ def health():
     """Health check for service orchestration and Docker Compose dependencies."""
     redis_healthy = False
     stub_llm_healthy = False
+    index_present = False
 
-    # Check Redis
+    # 1. Check Redis
     try:
         r = get_redis_client()
         redis_healthy = bool(r.ping())
     except Exception as e:
         logger.warning(f"Healthcheck: Redis unreachable ({e})", extra={"correlation_id": "health"})
 
-    # Check Stub LLM
+    # 2. Check Index Presence (index_meta.json)
+    chroma_dir = os.getenv("CHROMA_DIR", "/app/data/chroma")
+    meta_candidates = [
+        os.path.join(chroma_dir, "index_meta.json"),
+        os.path.join(os.getcwd(), "data", "chroma", "index_meta.json"),
+        "index_meta.json",
+    ]
+    index_present = any(os.path.exists(p) for p in meta_candidates)
+
+    # 3. Check Stub LLM
     stub_base_url = os.getenv("LLM_BASE_URL", "http://stub-llm:8001")
     try:
         with urllib.request.urlopen(f"{stub_base_url}/health", timeout=1.0) as resp:
             stub_llm_healthy = (resp.status == 200)
-    except Exception as e:
-        # In early phase or local test, stub_llm might not be up yet if tested in isolation
+    except Exception:
         stub_llm_healthy = False
 
-    is_overall_healthy = redis_healthy
+    is_overall_healthy = redis_healthy and index_present
     status_code = status.HTTP_200_OK if is_overall_healthy else status.HTTP_503_SERVICE_UNAVAILABLE
 
     return JSONResponse(
@@ -136,6 +145,8 @@ def health():
         content={
             "status": "healthy" if is_overall_healthy else "unhealthy",
             "redis": redis_healthy,
+            "index_present": index_present,
+            "index": index_present,
             "stub_llm": stub_llm_healthy,
             "version": "1.0.0",
         },

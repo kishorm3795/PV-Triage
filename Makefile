@@ -22,10 +22,10 @@ logs:
 	docker compose logs -f
 
 test:
-	python3.11 -m pytest api/tests/ -v
+	PYTHONPATH=scripts:. python3.11 -m pytest api/tests/ -v
 
 ingest:
-	@echo "not implemented yet"
+	docker compose run --rm ingest
 
 eval:
 	@echo "not implemented yet"
@@ -37,4 +37,4 @@ scan-secrets:
 	@bash ./scripts/scan_secrets.sh
 
 clean-clone-test:
-	@echo "not implemented yet"
+	@bash ./scripts/clean_clone_test.sh

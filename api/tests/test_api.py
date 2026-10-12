@@ -111,3 +111,19 @@ def test_placeholder_returns_valid_run_result():
     # Validate through Pydantic v2
     validated = RunResult.model_validate(result.model_dump())
     assert validated.run_id == "run_unit_001"
+
+
+def test_health_endpoint_schema():
+    """Verify that /health reports redis, index_present, and stub_llm dependency status."""
+    from fastapi.testclient import TestClient
+    from api.main import app
+
+    client = TestClient(app)
+    response = client.get("/health")
+    assert response.status_code in (200, 503)
+    data = response.json()
+    assert "status" in data
+    assert "redis" in data
+    assert "index_present" in data
+    assert "stub_llm" in data
+
