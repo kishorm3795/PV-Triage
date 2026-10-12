@@ -65,10 +65,23 @@ if [ "$HEALTHY" != "true" ]; then
     exit 1
 fi
 
-echo "[clean-clone] Checking Prometheus targets (/api/v1/targets)..."
-sleep 6 # Allow scrape cycle to run
-TARGETS_JSON=$(curl -s http://localhost:9090/api/v1/targets || echo "{}")
-echo "[clean-clone] Prometheus Targets Summary:"
+echo "[clean-clone] Waiting for Prometheus scrape cycle and verifying targets are UP..."
+TARGETS_UP=false
+TARGETS_JSON=""
+
+for i in {1..20}; do
+    TARGETS_JSON=$(curl -s http://localhost:9090/api/v1/targets || echo "{}")
+    API_UP=$(python3 -c "import json; data=json.loads('''${TARGETS_JSON}'''); print(any(t.get('labels',{}).get('job')=='api' and t.get('health')=='up' for t in data.get('data',{}).get('activeTargets',[])))" 2>/dev/null || echo "False")
+    WORKER_UP=$(python3 -c "import json; data=json.loads('''${TARGETS_JSON}'''); print(any(t.get('labels',{}).get('job')=='worker' and t.get('health')=='up' for t in data.get('data',{}).get('activeTargets',[])))" 2>/dev/null || echo "False")
+    if [ "$API_UP" = "True" ] && [ "$WORKER_UP" = "True" ]; then
+        TARGETS_UP=true
+        break
+    fi
+    echo "[clean-clone] Waiting for targets to enter UP status... ($i/20)"
+    sleep 2
+done
+
+echo "[clean-clone] Prometheus Targets Status (targets UP: ${TARGETS_UP}):"
 python3 -c "
 import sys, json
 try:
@@ -78,10 +91,15 @@ try:
         job = t.get('labels', {}).get('job')
         health = t.get('health')
         scrape_url = t.get('scrapeUrl')
-        print(f'  - Job: {job} | Health: {health} | URL: {scrape_url}')
+        print(f'  - Job: {job:<12} | Health: {health:<6} | Scrape URL: {scrape_url}')
 except Exception as e:
     print('Error parsing targets:', e)
 "
+
+if [ "$TARGETS_UP" != "true" ]; then
+    echo "[clean-clone] ERROR: Not all Prometheus targets reached UP state!"
+    exit 1
+fi
 
 echo "[clean-clone] Submitting valid adverse event report to POST /v1/reports..."
 SUBMIT_PAYLOAD='{
