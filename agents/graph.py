@@ -15,7 +15,7 @@ from typing import Any, Dict, List
 from langgraph.graph import END, START, StateGraph
 
 from agents.state import AgentState
-from agents.tools import get_clause, get_request_fields, rewrite_query, search_corpus
+from agents.tools import ToolCallLimitExceeded, ToolTimeoutError, wrap_tools
 from llm.client import LLMClient
 from prompts.loader import load_prompt
 from shared.contracts import (
@@ -43,66 +43,71 @@ def assessor_node(state: AgentState) -> AgentState:
     prompt_versions: Dict[str, str] = dict(state.get("prompt_versions", {}))
     retrieved_passages: List[Passage] = list(state.get("retrieved_passages", []))
 
+    # Create wrapped tools that log to this run's tool_log
+    tools = wrap_tools(tool_log)
+
     # Load assessor system prompt
     assessor_prompt, assessor_ver = load_prompt("assessor")
     prompt_versions["assessor"] = assessor_ver
 
     report = state.get("report", {})
     run_id = state.get("run_id", "run_unknown")
-    suspect_drug = report.get("suspect_drug", "")
-    reaction_desc = report.get("reaction_description", "")
-    outcome = str(report.get("outcome", ""))
-    narrative = str(report.get("narrative", ""))
 
-    # Step 1: Execute tool calls to gather regulatory context
-    # Tool 1: Rewrite lay query to candidate medical terms
-    t1_start = time.perf_counter()
-    medical_terms = rewrite_query(reaction_desc)
-    t1_latency = (time.perf_counter() - t1_start) * 1000.0
-    tool_log.append(
-        ToolCall(
-            step=len(tool_log) + 1,
-            tool="rewrite_query",
-            input={"lay_text": reaction_desc},
-            output_summary=f"Rewrote to {len(medical_terms)} medical candidate terms",
-            latency_ms=t1_latency,
-            ok=True,
-        )
-    )
+    try:
+        # Step 1: Execute tool calls to gather regulatory context
+        # Tool 1: Extract request fields
+        req_fields = tools.get_request_fields(run_id, report=report)
+        suspect_drug = req_fields.get("suspect_drug") or report.get("suspect_drug", "")
+        reaction_desc = req_fields.get("reaction_description") or report.get("reaction_description", "")
+        outcome = str(req_fields.get("outcome") or report.get("outcome", ""))
+        narrative = str(req_fields.get("narrative") or report.get("narrative", ""))
 
-    # Tool 2: Search corpus for drug package insert and seriousness guidance
-    t2_start = time.perf_counter()
-    search_query = f"{suspect_drug} {' '.join(medical_terms[:2])} seriousness hospitalisation"
-    passages = search_corpus(search_query, k=5)
-    t2_latency = (time.perf_counter() - t2_start) * 1000.0
-    retrieved_passages.extend(passages)
-    tool_log.append(
-        ToolCall(
-            step=len(tool_log) + 1,
-            tool="search_corpus",
-            input={"query": search_query},
-            output_summary=f"Retrieved {len(passages)} passages from regulatory corpus and package insert",
-            latency_ms=t2_latency,
-            ok=True,
-        )
-    )
+        # Tool 2: Rewrite lay query to candidate medical terms
+        medical_terms = tools.rewrite_query(reaction_desc)
 
-    # Tool 3: Lookup specific statutory clause for expedited reporting timeline
-    t3_start = time.perf_counter()
-    clause_passage = get_clause("ndct-2019-second-sched-table1")
-    t3_latency = (time.perf_counter() - t3_start) * 1000.0
-    if clause_passage and clause_passage not in retrieved_passages:
-        retrieved_passages.append(clause_passage)
-    tool_log.append(
-        ToolCall(
-            step=len(tool_log) + 1,
-            tool="get_clause",
-            input={"clause_id": "ndct-2019-second-sched-table1"},
-            output_summary="Retrieved NDCT 2019 15-day expedited reporting timeline clause",
-            latency_ms=t3_latency,
-            ok=True,
-        )
-    )
+        # Tool 3: Search corpus for drug package insert and seriousness guidance
+        search_query = f"{suspect_drug} {' '.join(medical_terms[:2])} seriousness hospitalisation"
+        passages = tools.search_corpus(search_query, k=5)
+        retrieved_passages.extend(passages)
+
+        # Tool 4: Lookup specific statutory clause for expedited reporting timeline
+        clause_passage = tools.get_clause("ndct-2019-second-sched-table1")
+        if clause_passage and clause_passage not in retrieved_passages:
+            retrieved_passages.append(clause_passage)
+    except ToolCallLimitExceeded as limit_err:
+        return {
+            "run_id": run_id,
+            "report": report,
+            "retrieved_passages": retrieved_passages,
+            "tool_log": tool_log,
+            "trace": trace,
+            "step_count": step_count,
+            "prompt_versions": prompt_versions,
+            "status": "escalated",
+            "escalation_reason": f"MAX_TOOL_CALLS exceeded: {limit_err}",
+            "seriousness": Seriousness(is_serious=False, criteria=[]),
+            "expectedness": Expectedness(is_listed=False, matched_term=None),
+            "citations": [],
+            "verification_passed": False,
+            "verification_errors": [str(limit_err)],
+        }
+    except ToolTimeoutError as timeout_err:
+        return {
+            "run_id": run_id,
+            "report": report,
+            "retrieved_passages": retrieved_passages,
+            "tool_log": tool_log,
+            "trace": trace,
+            "step_count": step_count,
+            "prompt_versions": prompt_versions,
+            "status": "escalated",
+            "escalation_reason": f"TOOL_TIMEOUT exceeded: {timeout_err}",
+            "seriousness": Seriousness(is_serious=False, criteria=[]),
+            "expectedness": Expectedness(is_listed=False, matched_term=None),
+            "citations": [],
+            "verification_passed": False,
+            "verification_errors": [str(timeout_err)],
+        }
 
     # Step 2: Call LLM Client to draft assessment
     llm = LLMClient()
@@ -231,6 +236,9 @@ def assessor_node(state: AgentState) -> AgentState:
 
 def verifier_node(state: AgentState) -> AgentState:
     """Verifier agent node: validates evidence citations and statutory claims."""
+    if state.get("status") == "escalated":
+        return state
+
     step_count = state.get("step_count", 0) + 1
     trace: List[TraceStep] = list(state.get("trace", []))
     prompt_versions: Dict[str, str] = dict(state.get("prompt_versions", {}))
