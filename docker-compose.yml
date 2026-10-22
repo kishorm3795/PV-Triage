@@ -76,6 +76,7 @@ services:
       - PROMPT_VERSION=${PROMPT_VERSION:-v1}
       - CHROMA_DIR=${CHROMA_DIR:-/app/data/chroma}
       - OTLP_ENDPOINT=${OTLP_ENDPOINT:-http://jaeger:4317}
+      - RUN_TIMEOUT_S=${RUN_TIMEOUT_S:-60}
     volumes:
       - chroma_data:/app/data/chroma:ro
     healthcheck:
@@ -104,6 +105,7 @@ services:
       - PROMPT_VERSION=${PROMPT_VERSION:-v1}
       - CHROMA_DIR=${CHROMA_DIR:-/app/data/chroma}
       - OTLP_ENDPOINT=${OTLP_ENDPOINT:-http://jaeger:4317}
+      - RUN_TIMEOUT_S=${RUN_TIMEOUT_S:-60}
       - METRICS_PORT=8002
     volumes:
       - chroma_data:/app/data/chroma:ro

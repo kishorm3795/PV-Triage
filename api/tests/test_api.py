@@ -1,10 +1,13 @@
 """api/tests/test_api.py - Unit and integration tests for API boundary and validation."""
 
 from datetime import date, timedelta
+import json
+import logging
 import pytest
 from pydantic import ValidationError
+from api.logging_setup import JSONFormatter, get_correlation_id, set_correlation_id, setup_logging
 from api.models import AdverseEventReport, Outcome, PatientSex, ReporterType
-from shared.contracts import RunResult
+from shared.contracts import Expectedness, RunResult, Seriousness
 from worker.placeholder import run_graph
 
 
@@ -127,3 +130,60 @@ def test_health_endpoint_schema():
     assert "index_present" in data
     assert "stub_llm" in data
 
+
+def test_json_logging_with_correlation_id():
+    """Verify structured JSON logging and correlation_id formatting."""
+    formatter = JSONFormatter(service="test-api")
+    set_correlation_id("test_corr_999")
+
+    record = logging.LogRecord(
+        name="test.logger",
+        level=logging.INFO,
+        pathname="test.py",
+        lineno=10,
+        msg="Processing job %s",
+        args=("job_42",),
+        exc_info=None,
+    )
+    formatted = formatter.format(record)
+    parsed = json.loads(formatted)
+
+    assert parsed["service"] == "test-api"
+    assert parsed["correlation_id"] == "test_corr_999"
+    assert parsed["message"] == "Processing job job_42"
+    assert "timestamp" in parsed
+
+
+def test_unconfident_answer_for_failed_run():
+    """Verify that a failed or incomplete run never returns a confident routing recommendation."""
+    failed_result = RunResult(
+        run_id="run_fail_001",
+        status="failed",
+        routing=None,
+        routing_basis=None,
+        seriousness=Seriousness(is_serious=False, criteria=[]),
+        expectedness=Expectedness(is_listed=False, matched_term=None),
+        citations=[],
+        escalation_reason="Worker timeout exceeded",
+        prompt_versions={},
+        tool_calls=[],
+        trace=[],
+    )
+    assert failed_result.status == "failed"
+    assert failed_result.routing is None
+    assert failed_result.routing_basis is None
+    assert len(failed_result.citations) == 0
+
+
+def test_failed_jobs_endpoint():
+    """Verify GET /v1/failed-jobs endpoint exists and returns schema-compliant structure."""
+    from fastapi.testclient import TestClient
+    from api.main import app
+
+    client = TestClient(app)
+    response = client.get("/v1/failed-jobs")
+    assert response.status_code == 200
+    data = response.json()
+    assert "failed_jobs_count" in data
+    assert "failed_jobs" in data
+    assert isinstance(data["failed_jobs"], list)

@@ -15,6 +15,10 @@ COPY api /app/api
 COPY pipeline /app/pipeline
 COPY corpus /app/corpus
 COPY scripts /app/scripts
+COPY agents /app/agents
+COPY llm /app/llm
+COPY prompts /app/prompts
+COPY guardrails /app/guardrails
 
 EXPOSE 8002
 

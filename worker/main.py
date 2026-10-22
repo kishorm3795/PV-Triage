@@ -7,12 +7,16 @@ Scalable across multiple container instances without fixed host ports.
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import time
 from prometheus_client import Counter, Gauge, Histogram, start_http_server
 import redis
 from rq import Queue, Worker
+
+from api.logging_setup import setup_logging
+from worker.tasks import rq_exception_handler
 
 # Worker Prometheus Metrics
 WORKER_JOBS_TOTAL = Counter(
@@ -29,21 +33,23 @@ WORKER_ACTIVE_GAUGE = Gauge(
     "Worker heartbeat / liveness indicator",
 )
 
+logger = setup_logging("worker")
+
 
 def main() -> None:
     # 1. Start Prometheus HTTP metrics exporter
     metrics_port = int(os.getenv("METRICS_PORT", "8002"))
     try:
         start_http_server(metrics_port)
-        print(f"[worker] Prometheus metrics exporter started on port {metrics_port}", flush=True)
+        logger.info("Prometheus metrics exporter started on port %d", metrics_port)
     except Exception as exc:
-        print(f"[worker] Notice: Prometheus metrics exporter could not bind port {metrics_port}: {exc}", flush=True)
+        logger.warning("Prometheus metrics exporter could not bind port %d: %s", metrics_port, exc)
 
     WORKER_ACTIVE_GAUGE.set(1)
 
     # 2. Redis Connection with retry
     redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
-    print(f"[worker] Starting RQ worker, connecting to {redis_url}...", flush=True)
+    logger.info("Starting RQ worker, connecting to %s...", redis_url)
 
     retries = 15
     conn = None
@@ -51,20 +57,24 @@ def main() -> None:
         try:
             conn = redis.from_url(redis_url)
             conn.ping()
-            print("[worker] Connected to Redis successfully.", flush=True)
+            logger.info("Connected to Redis successfully.")
             break
         except Exception as e:
-            print(f"[worker] Redis not ready ({e}), waiting 2s...", flush=True)
+            logger.warning("Redis not ready (%s), waiting 2s...", e)
             time.sleep(2)
             retries -= 1
 
     if conn is None:
-        print("[worker] Could not connect to Redis. Exiting.", file=sys.stderr, flush=True)
+        logger.error("Could not connect to Redis. Exiting.")
         sys.exit(1)
 
     queue = Queue("runs", connection=conn)
-    worker = Worker([queue], connection=conn)
-    print("[worker] RQ Worker initialized. Listening on queue 'runs'...", flush=True)
+    worker = Worker(
+        [queue],
+        connection=conn,
+        exception_handlers=[rq_exception_handler],
+    )
+    logger.info("RQ Worker initialized with timeout & failure handlers. Listening on queue 'runs'...")
     worker.work(with_scheduler=False)
 
 

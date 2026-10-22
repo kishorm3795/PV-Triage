@@ -1,0 +1,118 @@
+{
+    "run_id": "rep_ref_lamotrigine_001",
+    "status": "completed",
+    "created_at": "2026-10-22T18:09:24.261123+00:00",
+    "started_at": "2026-10-22T18:09:24.276793+00:00",
+    "finished_at": "2026-10-22T18:09:24.354667+00:00",
+    "updated_at": "2026-10-22T18:09:24.354667+00:00",
+    "timestamps": {
+        "created_at": "2026-10-22T18:09:24.261123+00:00",
+        "queued_at": "2026-10-22T18:09:24.261123+00:00",
+        "started_at": "2026-10-22T18:09:24.276793+00:00",
+        "running_at": "2026-10-22T18:09:24.276793+00:00",
+        "completed_at": "2026-10-22T18:09:24.354667+00:00",
+        "escalated_at": null,
+        "failed_at": null,
+        "finished_at": "2026-10-22T18:09:24.354667+00:00",
+        "updated_at": "2026-10-22T18:09:24.354667+00:00"
+    },
+    "result": {
+        "run_id": "rep_ref_lamotrigine_001",
+        "status": "completed",
+        "routing": "expedited",
+        "routing_basis": "Expedited 15-day reporting recommended: Suspect drug 'Lamotrigine' caused reaction 'The patient's skin started peeling badly a week after starting the drug, and she was admitted to hospital.', which satisfies seriousness criteria (hospitalisation) and is not listed as expected in the approved package insert.",
+        "seriousness": {
+            "is_serious": true,
+            "criteria": [
+                "hospitalisation"
+            ]
+        },
+        "expectedness": {
+            "is_listed": false,
+            "matched_term": null
+        },
+        "citations": [
+            {
+                "passage_id": "ipc-pv-guidance-sec4-seriousness",
+                "quote": "A serious adverse event (SAE) or reaction is any untoward medical occurrence that at any dose results in death, inpatient hospitalisation or prolongation of existing hospitalisation, persistent or significant disability or incapacity, or is a congenital anomaly or birth defect, or is life-threatening."
+            },
+            {
+                "passage_id": "ndct-2019-second-sched-table1",
+                "quote": "Any serious unexpected adverse event shall be reported by the sponsor or marketing authorisation holder to the Central Licencing Authority within fifteen calendar days of receipt of the information."
+            }
+        ],
+        "escalation_reason": null,
+        "prompt_versions": {
+            "assessor": "v1",
+            "verifier": "v1"
+        },
+        "tool_calls": [
+            {
+                "step": 1,
+                "tool": "rewrite_query",
+                "input": {
+                    "lay_text": "The patient's skin started peeling badly a week after starting the drug, and she was admitted to hospital."
+                },
+                "output_summary": "Rewrote to 4 medical candidate terms",
+                "latency_ms": 0.011542000009967524,
+                "ok": true
+            },
+            {
+                "step": 2,
+                "tool": "search_corpus",
+                "input": {
+                    "query": "Lamotrigine Toxic epidermal necrolysis Stevens-Johnson syndrome seriousness hospitalisation"
+                },
+                "output_summary": "Retrieved 4 passages from regulatory corpus and package insert",
+                "latency_ms": 0.10733400000617621,
+                "ok": true
+            },
+            {
+                "step": 3,
+                "tool": "get_clause",
+                "input": {
+                    "clause_id": "ndct-2019-second-sched-table1"
+                },
+                "output_summary": "Retrieved NDCT 2019 15-day expedited reporting timeline clause",
+                "latency_ms": 0.005833000017219092,
+                "ok": true
+            }
+        ],
+        "trace": [
+            {
+                "step": 1,
+                "agent": "assessor",
+                "kind": "assessment_generation",
+                "latency_ms": 62.74095799997781,
+                "prompt_tokens": 150,
+                "completion_tokens": 62,
+                "cost_usd": 5.9699999999999994e-05,
+                "detail": {
+                    "action": "draft_triage_assessment",
+                    "routing": "expedited",
+                    "is_serious": true,
+                    "criteria": [
+                        "hospitalisation"
+                    ],
+                    "citations_count": 2
+                }
+            },
+            {
+                "step": 2,
+                "agent": "verifier",
+                "kind": "verification_audit",
+                "latency_ms": 15.0,
+                "prompt_tokens": 95,
+                "completion_tokens": 32,
+                "cost_usd": 3.345e-05,
+                "detail": {
+                    "verification_passed": true,
+                    "verified_citations": 2,
+                    "errors": [],
+                    "status": "completed"
+                }
+            }
+        ]
+    },
+    "error": null
+}
