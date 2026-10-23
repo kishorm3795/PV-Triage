@@ -74,8 +74,9 @@ def test_run_graph_reference_case():
     assert result.prompt_versions["verifier"] == "v1"
 
     # 6. Tool calls logged
-    assert len(result.tool_calls) >= 3
+    assert len(result.tool_calls) >= 4
     tool_names = [tc.tool for tc in result.tool_calls]
+    assert "get_request_fields" in tool_names
     assert "rewrite_query" in tool_names
     assert "search_corpus" in tool_names
     assert "get_clause" in tool_names
@@ -98,3 +99,21 @@ def test_run_graph_error_handling():
         assert isinstance(result, RunResult)
         assert result.status == "failed"
         assert "Execution error: Graph engine crashed" in (result.escalation_reason or "")
+
+
+def test_run_graph_max_tool_calls_escalates(monkeypatch):
+    """Verify exceeding MAX_TOOL_CALLS immediately escalates with the bound named in reason."""
+    monkeypatch.setenv("MAX_TOOL_CALLS", "2")
+    report = {
+        "report_id": "rep_bound_exceeded",
+        "suspect_drug": "Lamotrigine",
+        "reaction_description": "Skin peeling and blistering",
+        "outcome": "not_recovered",
+    }
+    result = run_graph(report, "run_bound_001")
+    assert isinstance(result, RunResult)
+    assert result.status == "escalated"
+    assert "MAX_TOOL_CALLS" in (result.escalation_reason or "")
+    # Breaching tool call should be captured in tool_calls
+    assert len(result.tool_calls) == 3
+    assert result.tool_calls[-1].ok is False

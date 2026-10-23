@@ -10,6 +10,7 @@ import logging
 from typing import Any, Dict
 from agents.graph import create_triage_graph
 from agents.state import AgentState
+from agents.tools import register_run_report
 from shared.contracts import (
     Expectedness,
     RunResult,
@@ -39,6 +40,8 @@ def run_graph(report: Dict[str, Any], run_id: str) -> RunResult:
     Returns:
         RunResult meeting the shared/contracts.py specification.
     """
+    register_run_report(run_id, report)
+
     initial_state: AgentState = {
         "run_id": run_id,
         "report": report,
