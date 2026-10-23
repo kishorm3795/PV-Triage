@@ -1,0 +1,84 @@
+{
+  "skin started peeling badly": [
+    "toxic epidermal necrolysis",
+    "Stevens-Johnson syndrome",
+    "severe cutaneous adverse reactions",
+    "exfoliative dermatitis",
+    "vesiculobullous rash"
+  ],
+  "skin peeling": [
+    "toxic epidermal necrolysis",
+    "Stevens-Johnson syndrome",
+    "exfoliative dermatitis",
+    "vesiculobullous rash",
+    "desquamation"
+  ],
+  "peeling": [
+    "toxic epidermal necrolysis",
+    "Stevens-Johnson syndrome",
+    "exfoliative dermatitis"
+  ],
+  "bad rash": [
+    "Stevens-Johnson syndrome",
+    "toxic epidermal necrolysis",
+    "serious skin rashes",
+    "exfoliative dermatitis",
+    "maculopapular rash"
+  ],
+  "blistering": [
+    "vesiculobullous rash",
+    "bullous eruption",
+    "Stevens-Johnson syndrome",
+    "toxic epidermal necrolysis"
+  ],
+  "blisters": [
+    "vesiculobullous rash",
+    "bullous dermatitis",
+    "Stevens-Johnson syndrome"
+  ],
+  "hives": [
+    "urticaria",
+    "angioedema"
+  ],
+  "admitted to hospital": [
+    "hospitalization",
+    "inpatient hospitalisation",
+    "prolongation of hospitalization",
+    "serious adverse event"
+  ],
+  "hospitalized": [
+    "hospitalization",
+    "inpatient hospitalisation"
+  ],
+  "yellow eyes": [
+    "jaundice",
+    "hyperbilirubinemia",
+    "drug-induced liver injury"
+  ],
+  "yellow skin": [
+    "jaundice",
+    "drug-induced liver injury",
+    "hepatotoxicity"
+  ],
+  "liver problems": [
+    "drug-induced liver injury",
+    "hepatotoxicity",
+    "acute hepatic failure"
+  ],
+  "stomach bleeding": [
+    "gastrointestinal hemorrhage",
+    "upper gastrointestinal bleeding",
+    "melena"
+  ],
+  "internal bleeding": [
+    "gastrointestinal hemorrhage",
+    "hemorrhage",
+    "coagulopathy"
+  ],
+  "difficulty breathing": [
+    "dyspnea",
+    "respiratory distress",
+    "bronchospasm",
+    "angioedema"
+  ]
+}
