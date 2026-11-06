@@ -7,6 +7,7 @@ Implements the GraphRunner protocol from shared/contracts.py:
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Dict
 from agents.graph import create_triage_graph
 from agents.state import AgentState
@@ -30,6 +31,12 @@ def get_graph():
     return _COMPILED_GRAPH
 
 
+def reset_graph():
+    """Reset cached graph (useful for test environments)."""
+    global _COMPILED_GRAPH
+    _COMPILED_GRAPH = None
+
+
 def run_graph(report: Dict[str, Any], run_id: str) -> RunResult:
     """Execute the multi-agent pharmacovigilance triage workflow.
 
@@ -50,6 +57,11 @@ def run_graph(report: Dict[str, Any], run_id: str) -> RunResult:
         "trace": [],
         "step_count": 0,
         "prompt_versions": {},
+        "run_start_time": time.perf_counter(),
+        "retry_count": 0,
+        "search_strategy": "initial",
+        "verifier_feedback": None,
+        "force_invalid_citation": bool(report.get("force_invalid_citation", False)),
         "status": "running",
         "routing": None,
         "routing_basis": None,
@@ -88,15 +100,23 @@ def run_graph(report: Dict[str, Any], run_id: str) -> RunResult:
 
     except Exception as exc:
         logger.exception("Agent execution failed for run %s: %s", run_id, exc)
+        err_msg = str(exc)
+        is_verifier = "verifier" in err_msg.lower() or "verifier" in repr(exc).lower()
+        failed_status: Any = "escalated" if is_verifier else "failed"
+        reason = (
+            f"Verifier crashed: {err_msg}. Escalating per safety protocol (Global Rule 6)."
+            if is_verifier
+            else f"Execution error: {err_msg}"
+        )
         failed_result = RunResult(
             run_id=run_id,
-            status="failed",
+            status=failed_status,
             routing=None,
             routing_basis=None,
             seriousness=Seriousness(is_serious=False, criteria=[]),
             expectedness=Expectedness(is_listed=False, matched_term=None),
             citations=[],
-            escalation_reason=f"Execution error: {str(exc)}",
+            escalation_reason=reason,
             prompt_versions=initial_state.get("prompt_versions", {}),
             tool_calls=initial_state.get("tool_log", []),
             trace=initial_state.get("trace", []),
