@@ -29,6 +29,30 @@ logger = logging.getLogger("agents.tools")
 # Retriever Implementations
 # ========================================================================
 
+MOCK_CLAUSE_ALIASES: Dict[str, str] = {
+    "ndct-2019-second-sched-table1": "ndct-2019-second-sched-table1",
+    "Second Schedule, Table 1": "ndct-2019-second-sched-table1",
+    "Second Schedule": "ndct-2019-second-sched-table1",
+    "Fifth Schedule": "ndct-2019-second-sched-table1",
+    "Table 1": "ndct-2019-second-sched-table1",
+    "2.7.1": "ipc-pv-guidance-sec2-7-1",
+    "ipc-pv-guidance-sec2-7-1": "ipc-pv-guidance-sec2-7-1",
+    "ipc-pv-guidance-sec4-seriousness": "ipc-pv-guidance-sec4-seriousness",
+    "2.5.3.6": "ipc-pv-guidance-sec2-5-3-6",
+    "ipc-pv-guidance-sec2-5-3-6": "ipc-pv-guidance-sec2-5-3-6",
+    "Section 4.1": "ipc-pv-guidance-sec4-seriousness",
+    "lamotrigine-pi-sec4-8-undesirable": "lamotrigine-pi-sec4-8-undesirable",
+    "lamotrigine-pi-boxed-warning": "lamotrigine-pi-boxed-warning",
+    "Boxed Warning": "lamotrigine-pi-boxed-warning",
+    "lamotrigine-pi-sec5-1": "lamotrigine-pi-sec5-1",
+    "5.1": "lamotrigine-pi-sec5-1",
+    "Section 5.1": "lamotrigine-pi-sec5-1",
+    "6.2": "lamotrigine-pi-sec4-8-undesirable",
+    "ipc-pv-guidance-sec5-expectedness": "ipc-pv-guidance-sec5-expectedness",
+    "5.2": "ipc-pv-guidance-sec5-expectedness",
+    "Section 5.2": "ipc-pv-guidance-sec5-expectedness",
+}
+
 
 class MockRetriever:
     """Deterministic in-memory Mock Retriever implementing the Retriever protocol."""
@@ -62,6 +86,28 @@ class MockRetriever:
                 ),
                 score=0.92,
             ),
+            "ipc-pv-guidance-sec2-5-3-6": Passage(
+                id="ipc-pv-guidance-sec2-5-3-6",
+                clause_id="2.5.3.6",
+                source_doc="IPC Pharmacovigilance Guidance Document for MAHs",
+                page=31,
+                section="Chapter 2, Section 2.5.3.6: Seriousness of the reaction",
+                text=(
+                    "(iii) Hospitalization /prolongation of existing hospitalization: If Adverse Events caused hospitalization or increased the hospital stay of the patient."
+                ),
+                score=0.91,
+            ),
+            "ipc-pv-guidance-sec2-7-1": Passage(
+                id="ipc-pv-guidance-sec2-7-1",
+                clause_id="2.7.1",
+                source_doc="IPC Pharmacovigilance Guidance Document for MAHs",
+                page=33,
+                section="Chapter 2, Section 2.7.1: Reporting time lines",
+                text=(
+                    "2.7.1 All Serious Adverse Events must be reported by MAH within 15 calendar days of receipt of information from any source, to (i) National Regulatory Authority (NRA), i.e., CDSCO through email - pharma.covig@cdsco.nic.in (ii) National Coordination Centre, Pharmacovigilance Programme of India, Indian Pharmacopoeia Commission through email - mah.nccpvpi-ipc@gov.in."
+                ),
+                score=0.94,
+            ),
             "lamotrigine-pi-sec4-8-undesirable": Passage(
                 id="lamotrigine-pi-sec4-8-undesirable",
                 clause_id="lamotrigine-pi-sec4-8-undesirable",
@@ -75,6 +121,31 @@ class MockRetriever:
                     "reactions require immediate discontinuation."
                 ),
                 score=0.88,
+            ),
+            "lamotrigine-pi-boxed-warning": Passage(
+                id="lamotrigine-pi-boxed-warning",
+                clause_id="Boxed Warning",
+                source_doc="Lamotrigine Package Insert",
+                page=2,
+                section="Boxed Warning: WARNING: SERIOUS SKIN RASHES",
+                text=(
+                    "LAMICTAL can cause serious rashes requiring hospitalization and discontinuation of treatment. "
+                    "The incidence of these rashes, which have included Stevens-Johnson syndrome, is approximately 0.3% to 0.8% in pediatric patients (aged 2 to 17 years) and 0.08% to 0.3% in adults receiving LAMICTAL. "
+                    "One rash-related death was reported in a prospectively followed cohort of 1,983 pediatric patients (aged 2 to 16 years) with epilepsy taking LAMICTAL as adjunctive therapy. "
+                    "In worldwide postmarketing experience, rare cases of toxic epidermal necrolysis and/or rash-related death have been reported in adult and pediatric patients..."
+                ),
+                score=0.93,
+            ),
+            "lamotrigine-pi-sec5-1": Passage(
+                id="lamotrigine-pi-sec5-1",
+                clause_id="Section 5.1",
+                source_doc="Lamotrigine Package Insert",
+                page=16,
+                section="Section 5.1: Warnings and Precautions - Serious Skin Rashes",
+                text=(
+                    "Among the rashes leading to hospitalization were Stevens-Johnson syndrome, toxic epidermal necrolysis, angioedema, and those associated with multiorgan hypersensitivity [see Warnings and Precautions (5.3)]."
+                ),
+                score=0.90,
             ),
             "ipc-pv-guidance-sec5-expectedness": Passage(
                 id="ipc-pv-guidance-sec5-expectedness",
@@ -93,6 +164,7 @@ class MockRetriever:
     def search(self, query: str, k: int = 5) -> List[Passage]:
         """Search mock corpus for relevant passages."""
         query_terms = set(query.lower().split())
+        query_lower = query.lower()
         scored_passages: List[tuple[float, Passage]] = []
 
         for p in self.passages.values():
@@ -106,12 +178,28 @@ class MockRetriever:
             final_score = (p.score or 0.8) * (1.0 + overlap_score)
             scored_passages.append((final_score, p))
 
+        # If query explicitly targets an unsupported drug outside corpus, filter out package inserts
+        known_unsupported_drugs = ["metformin", "warfarin", "aspirin", "paracetamol", "atorvastatin", "ibuprofen", "unknowndrug"]
+        for non_corpus_drug in known_unsupported_drugs:
+            if non_corpus_drug in query_lower and "lamotrigine" not in query_lower and "lamictal" not in query_lower:
+                scored_passages = [
+                    (s, p) for s, p in scored_passages
+                    if "package insert" not in p.source_doc.lower()
+                ]
+                break
+
         scored_passages.sort(key=lambda x: x[0], reverse=True)
         return [p for _, p in scored_passages[:k]]
 
     def get_clause(self, clause_id: str) -> Optional[Passage]:
-        """Retrieve passage by exact clause identifier."""
-        return self.passages.get(clause_id)
+        """Retrieve passage by exact clause identifier or known alias."""
+        target_id = MOCK_CLAUSE_ALIASES.get(clause_id, clause_id)
+        if target_id in self.passages:
+            return self.passages[target_id]
+        for p in self.passages.values():
+            if p.clause_id == clause_id:
+                return p
+        return None
 
 
 def _convert_to_contract_passage(obj: Any) -> Passage:

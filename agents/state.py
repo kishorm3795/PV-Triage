@@ -2,7 +2,7 @@
 
 Maintains complete execution context across assessor and verifier nodes,
 including report payload, retrieved passages, tool call audit log, trace steps,
-prompt versions, and intermediate/final decisions.
+prompt versions, retry accounting, and intermediate/final decisions.
 """
 
 from __future__ import annotations
@@ -29,6 +29,13 @@ class AgentState(TypedDict, total=False):
     trace: List[TraceStep]
     step_count: int
     prompt_versions: Dict[str, str]
+
+    # Execution bounds and control flow
+    run_start_time: float
+    retry_count: int
+    search_strategy: str
+    verifier_feedback: Optional[str]
+    force_invalid_citation: bool
 
     # Assessment determinations
     status: Literal["completed", "escalated", "failed"]
