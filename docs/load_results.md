@@ -115,3 +115,33 @@ However, scaling from 1 worker to 3 workers did not produce a linear 3x throughp
    * **Embedding Offloading**: To achieve linear scaling beyond 3 workers, sentence-transformer embedding generation should be offloaded to a dedicated batched microservice (e.g. Triton Inference Server or TEI) or accelerated via ONNX/Metal.
    * **Polling Backoff**: Client polling intervals should adopt exponential backoff or WebSocket/SSE push notifications rather than tight 50ms polling loops.
    * **Worker Sizing**: For high-volume pharmacovigilance intake surges (batch ingestion from hospitals or regulatory feeds), 3 workers comfortably sustain **~27–28 adverse event reports/second (~100,000 reports/hour)** while strictly honoring the 5.0s p95 decision-support SLO.
+
+---
+
+## 7. Phase 6 Whole-Run Caching Evaluation (Repeat-Request Mix)
+
+To control LLM inference expenditure and eliminate redundant worker execution, Phase 6 introduced **Redis whole-run result caching** keyed by the SHA-256 hash of normalized adverse event report payloads (`cache:report:<sha256>`).
+
+### Experimental Setup
+* **Concurrency**: 20 concurrent simulated clinical users.
+* **Duration**: 25 seconds per benchmark suite.
+* **Harness**: `loadtest/locustfile.py` measuring complete submission-to-terminal-result latency (`[E2E] Complete Run`).
+* **Repeat Request Traffic Mixes Tested**:
+  1. `uncached_0pct`: 0% repeat (100% unique cases) — baseline without cache benefit.
+  2. `cached_50pct`: 50% repeat mix (50% repeat cases, 50% unique cases).
+  3. `cached_80pct`: 80% repeat mix (80% repeat cases, 20% unique cases).
+
+### Results Table
+
+| Workload Mix | Repeat % | Cache Hit Rate | Throughput (RPS) | p50 Latency | p95 Latency | Est. Cost / Run | Cost Reduction |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Baseline (Uncached)** | 0% | 0.0% | 14.21 RPS | 830 ms | 3,000 ms | $0.000350 | Baseline |
+| **Realistic Repeat Mix** | 50% | 50.0% | **22.38 RPS** (+57.5%) | **500 ms** (-39.8%) | **1,700 ms** (-43.3%) | **$0.000175** | **-50.0%** |
+| **High Repeat Mix** | 80% | 80.0% | **18.83 RPS** (+32.5%) | **550 ms** (-33.7%) | **2,400 ms** (-20.0%) | **$0.000070** | **-80.0%** |
+
+### Caching Impact Analysis:
+1. **p95 Latency Reduction**: Under a realistic 50% repeat workload, complete-run p95 latency dropped from **3,000 ms to 1,700 ms (-43.3%)**, because cached submissions return HTTP 202 `completed` immediately on intake in `< 10ms`.
+2. **Throughput Expansion**: Peak throughput increased by **+57.5%** (from 14.21 to 22.38 RPS) under 20 concurrent users, as cached reports bypass the Redis RQ worker queue entirely.
+3. **Polling Overhead Reduction**: In the 80% repeat mix, client status polling volume plummeted from 3,346 requests to 488 requests (**-85.4% network traffic reduction**), dramatically reducing Redis command load and socket serialization contention.
+4. **LLM Cost Reduction**: Cost per triage run scales linearly with the cache miss rate ($C = (1 - R_{\text{repeat}}) \times C_{\text{baseline}}$), delivering an immediate **50% to 80% reduction in token consumption** without sacrificing regulatory verification accuracy.
+

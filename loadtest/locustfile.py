@@ -12,6 +12,7 @@ Meets Requirement D6 of Mini Project 14.
 from __future__ import annotations
 
 import os
+import random
 import time
 import uuid
 from locust import HttpUser, between, task
@@ -19,6 +20,7 @@ from locust import HttpUser, between, task
 # Configurable polling parameters
 POLL_INTERVAL_S = float(os.getenv("LOADTEST_POLL_INTERVAL_S", "0.05"))
 POLL_TIMEOUT_S = float(os.getenv("LOADTEST_POLL_TIMEOUT_S", "35.0"))
+REPEAT_RATIO = float(os.getenv("LOADTEST_REPEAT_RATIO", "0.5"))  # Phase 6 repeat request mix ratio
 
 # Representative valid adverse event payloads
 SAMPLE_REPORTS = [
@@ -68,7 +70,12 @@ class PharmacovigilanceUser(HttpUser):
     def submit_and_track_report(self) -> None:
         """Submit a valid report and poll until final triage result is produced."""
         report_template = SAMPLE_REPORTS[int(time.time() * 1000) % len(SAMPLE_REPORTS)].copy()
+        # Phase 6 repeat request mix: repeat identical report content vs unique case
+        if random.random() >= REPEAT_RATIO:
+            report_template["reaction_description"] = f"{report_template['reaction_description']} [case {uuid.uuid4().hex[:6]}]"
+
         report_id = f"rep_load_{uuid.uuid4().hex[:12]}"
+        client_id = f"client_{uuid.uuid4().hex[:4]}"
         payload = {**report_template, "report_id": report_id}
 
         t_start = time.perf_counter()
@@ -80,6 +87,7 @@ class PharmacovigilanceUser(HttpUser):
         with self.client.post(
             "/v1/reports",
             json=payload,
+            headers={"X-Client-ID": client_id},
             name="POST /v1/reports",
             catch_response=True,
         ) as post_resp:
@@ -97,6 +105,14 @@ class PharmacovigilanceUser(HttpUser):
             try:
                 body = post_resp.json()
                 run_id = body.get("run_id")
+                # Phase 6 Cache Hit: already completed immediately on intake
+                if body.get("status") == "completed" and body.get("cached"):
+                    self._record_e2e_metric(
+                        duration_ms=(time.perf_counter() - t_start) * 1000.0,
+                        response_bytes=len(post_resp.content or b""),
+                        exception=None,
+                    )
+                    return
             except Exception as e:
                 post_resp.failure(f"Malformed JSON response on submission: {e}")
                 self._record_e2e_metric(
@@ -160,8 +176,8 @@ class PharmacovigilanceUser(HttpUser):
     def _record_e2e_metric(
         self,
         duration_ms: float,
-        response_bytes: int,
-        exception: Exception | None,
+        response_bytes: int = 0,
+        exception: Exception | None = None,
     ) -> None:
         """Fire custom Locust metric tracking complete submission-to-terminal-result latency."""
         self.environment.events.request.fire(
