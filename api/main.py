@@ -18,8 +18,9 @@ import uuid
 from typing import Any, Optional
 from fastapi import FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from pydantic import ValidationError
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, ValidationError
 import redis
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from rq import Queue
@@ -597,3 +598,39 @@ def list_quarantine():
             except Exception:
                 records.append({"quarantine_id": qid, "raw": raw})
     return {"quarantined_count": len(ids), "records": records}
+
+
+class FeedbackRequest(BaseModel):
+    """Payload for human evaluator feedback."""
+    rating: str  # "thumbs_up" | "thumbs_down"
+    reason: Optional[str] = None
+
+
+FeedbackRequest.model_rebuild()
+
+
+@app.post("/v1/runs/{run_id}/feedback")
+async def record_feedback(run_id: str, feedback: FeedbackRequest):
+    """Record qualified person feedback on a triage recommendation."""
+    r = get_redis_client()
+    state = r.get(f"run:{run_id}:state")
+    if not state:
+        raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found")
+
+    record = {
+        "run_id": run_id,
+        "rating": feedback.rating,
+        "reason": feedback.reason,
+        "recorded_at": _get_utc_now_iso(),
+    }
+    r.set(f"run:{run_id}:feedback", json.dumps(record))
+    r.lpush("runs:feedback", json.dumps(record))
+    logger.info("Feedback recorded for run %s: rating=%s", run_id, feedback.rating)
+    return {"status": "recorded", "run_id": run_id, "rating": feedback.rating}
+
+
+# Mount the single-page clinical web client at "/"
+web_dir = os.path.join(os.path.dirname(__file__), "web")
+if os.path.isdir(web_dir):
+    app.mount("/", StaticFiles(directory=web_dir, html=True), name="web")
+

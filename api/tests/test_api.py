@@ -4,8 +4,10 @@ from datetime import date, timedelta
 import json
 import logging
 import pytest
+from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from api.logging_setup import JSONFormatter, get_correlation_id, set_correlation_id, setup_logging
+from api.main import app
 from api.models import AdverseEventReport, Outcome, PatientSex, ReporterType
 from shared.contracts import Expectedness, RunResult, Seriousness
 from worker.placeholder import run_graph
@@ -177,9 +179,6 @@ def test_unconfident_answer_for_failed_run():
 
 def test_failed_jobs_endpoint():
     """Verify GET /v1/failed-jobs endpoint exists and returns schema-compliant structure."""
-    from fastapi.testclient import TestClient
-    from api.main import app
-
     client = TestClient(app)
     response = client.get("/v1/failed-jobs")
     assert response.status_code == 200
@@ -187,3 +186,36 @@ def test_failed_jobs_endpoint():
     assert "failed_jobs_count" in data
     assert "failed_jobs" in data
     assert isinstance(data["failed_jobs"], list)
+
+
+def test_web_client_served():
+    """Verify single-page clinical web client and static assets are served at root /."""
+    client = TestClient(app)
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "text/html" in response.headers.get("content-type", "")
+    assert "PV Triage" in response.text
+    assert "styles.css" in response.text
+    assert "app.js" in response.text
+
+    css_res = client.get("/styles.css")
+    assert css_res.status_code == 200
+    assert "--bg: #F6F8FB" in css_res.text
+
+    js_res = client.get("/app.js")
+    assert js_res.status_code == 200
+    assert "loadReferenceCase" in js_res.text
+
+
+def test_feedback_endpoint_not_found(monkeypatch):
+    """Verify POST /v1/runs/{id}/feedback returns 404 for unknown run."""
+    class FakeRedis:
+        def get(self, key):
+            return None
+    from api import main
+    monkeypatch.setattr(main, "get_redis_client", lambda: FakeRedis())
+
+    client = TestClient(app)
+    res = client.post("/v1/runs/unknown_run_xyz/feedback", json={"rating": "thumbs_up", "reason": "Accurate assessment"})
+    assert res.status_code == 404
+
