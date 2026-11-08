@@ -202,6 +202,15 @@ def process_triage_job(run_id: str, report_data: dict[str, Any]) -> dict[str, An
         RUNS_BY_STATUS_TOTAL.labels(status=final_status).inc()
         RUNS_THROUGHPUT_TOTAL.labels(status=final_status).inc()
         WORKER_TASK_DURATION.observe(duration)
+
+        # Cache completed result for subsequent identical reports (Phase 6 cost control)
+        if final_status == "completed":
+            report_hash = r.get(f"run:{run_id}:report_hash")
+            if report_hash:
+                cache_ttl = int(os.getenv("REPORT_CACHE_TTL_S", "86400"))
+                r.set(f"cache:report:{report_hash}", json.dumps(result_dict), ex=cache_ttl)
+                logger.info("Cached completed triage result for hash %s (TTL=%ds)", report_hash, cache_ttl)
+
         try:
             QUEUE_DEPTH.set(len(Queue("runs", connection=r)))
         except Exception:

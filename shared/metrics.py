@@ -88,6 +88,30 @@ QUARANTINE_TOTAL = Counter(
     "Total malformed reports quarantined by the intake boundary",
 )
 
+# Phase 6: Cost controls, caching, rate limiting, and circuit breaker metrics
+CIRCUIT_BREAKER_STATE = Gauge(
+    "circuit_breaker_state",
+    "Circuit breaker state: 0=Closed, 1=Half-Open, 2=Open",
+)
+CIRCUIT_BREAKER_STATE.set(0)  # Default: Closed
+
+REPORT_CACHE_HITS_TOTAL = Counter(
+    "pv_report_cache_hits_total",
+    "Total intake requests served from whole-run report cache",
+)
+
+REPORT_CACHE_MISSES_TOTAL = Counter(
+    "pv_report_cache_misses_total",
+    "Total intake requests missing report cache and sent to worker queue",
+)
+
+RATE_LIMIT_EXCEEDED_TOTAL = Counter(
+    "pv_rate_limit_exceeded_total",
+    "Total intake requests rejected with HTTP 429 rate limit exceeded",
+    ["client_id"],
+)
+
+
 
 def record_run_e2e_latency(
     redis_client,
