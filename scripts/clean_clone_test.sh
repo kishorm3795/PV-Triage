@@ -31,8 +31,9 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "[clean-clone] Cloning fresh copy of branch a/platform..."
-git clone --branch a/platform "file://${REPO_DIR}" "${TARGET_DIR}"
+CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")"
+echo "[clean-clone] Cloning fresh copy of branch ${CURRENT_BRANCH}..."
+git clone --branch "${CURRENT_BRANCH}" "file://${REPO_DIR}" "${TARGET_DIR}"
 
 cd "${TARGET_DIR}"
 
@@ -101,18 +102,18 @@ if [ "$TARGETS_UP" != "true" ]; then
     exit 1
 fi
 
-echo "[clean-clone] Submitting valid adverse event report to POST /v1/reports..."
+echo "[clean-clone] Submitting Section 4.1 reference case report to POST /v1/reports..."
 SUBMIT_PAYLOAD='{
-  "report_id": "rep_clean_clone_001",
+  "report_id": "rep_ref_clean_001",
   "reporter_type": "physician",
   "patient_age": 42,
   "patient_sex": "female",
   "suspect_drug": "Lamotrigine",
   "drug_start_date": "2026-09-01",
   "event_date": "2026-09-15",
-  "reaction_description": "Severe toxic epidermal necrolysis with extensive cutaneous peeling requiring ICU burn unit admission",
+  "reaction_description": "Severe skin peeling with epidermal detachment and mucocutaneous lesions requiring inpatient ICU hospitalization",
   "outcome": "not_recovered",
-  "narrative": "Patient admitted with life-threatening blistering and sloughing skin."
+  "narrative": "The patient'\''s skin started peeling badly a week after starting Lamotrigine, and she was admitted to hospital."
 }'
 
 SUBMIT_RESP=$(curl -s -X POST http://localhost:8000/v1/reports \
@@ -129,7 +130,7 @@ if [ -z "$RUN_ID" ]; then
 fi
 
 echo "[clean-clone] Polling GET /v1/runs/${RUN_ID} until completion..."
-POLL_RETRIES=20
+POLL_RETRIES=30
 POLL_COUNT=0
 RUN_DONE=false
 
@@ -137,14 +138,29 @@ while [ $POLL_COUNT -lt $POLL_RETRIES ]; do
     RUN_DATA=$(curl -s http://localhost:8000/v1/runs/${RUN_ID})
     STATUS=$(python3 -c "import json; print(json.loads('''${RUN_DATA}''').get('status', ''))")
     echo "[clean-clone] Run ${RUN_ID} status: ${STATUS} ($((POLL_COUNT + 1))/$POLL_RETRIES)"
-    if [ "$STATUS" = "completed" ] || [ "$STATUS" = "escalated" ]; then
+    if [ "$STATUS" = "completed" ]; then
         echo "[clean-clone] SUCCESS: Run finished with status: ${STATUS}"
         echo "[clean-clone] Final Run Payload:"
         python3 -m json.tool <<< "$RUN_DATA"
+
+        echo "[clean-clone] Verifying ground truth reference case assertions..."
+        python3 -c "
+import json, sys
+data = json.loads('''${RUN_DATA}''')
+assert data.get('status') == 'completed', f'Status must be completed, got {data.get(\"status\")}'
+assert data.get('routing') == 'expedited', f'Routing must be expedited, got {data.get(\"routing\")}'
+assert data.get('seriousness', {}).get('is_serious') is True, 'Seriousness must be is_serious=True'
+citations = data.get('citations', [])
+assert len(citations) > 0, 'Citations list must not be empty'
+print(f'  [PASS] Status: {data.get(\"status\")}')
+print(f'  [PASS] Routing: {data.get(\"routing\")}')
+print(f'  [PASS] Seriousness: is_serious={data.get(\"seriousness\", {}).get(\"is_serious\")}')
+print(f'  [PASS] Citations: {len(citations)} verified citations')
+"
         RUN_DONE=true
         break
-    elif [ "$STATUS" = "failed" ]; then
-        echo "[clean-clone] Run failed: ${RUN_DATA}"
+    elif [ "$STATUS" = "failed" ] || [ "$STATUS" = "escalated" ]; then
+        echo "[clean-clone] Run failed or escalated unexpectedly: ${RUN_DATA}"
         exit 1
     fi
     sleep 2

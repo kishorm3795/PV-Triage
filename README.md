@@ -233,6 +233,13 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
+#### Expected Startup Timing (Clean Clone Benchmark)
+
+| Startup Mode | Operations Performed | Expected Duration | Readiness Indicator |
+| :--- | :--- | :---: | :--- |
+| **With Pre-Built Vector Index** (standard clone with `data/chroma/`) | `docker compose up -d --build` (Redis, Stub LLM, Jaeger, Prometheus, cAdvisor, Grafana, API, Worker) | **6–8 seconds** (pre-built images: ~6s; initial build: ~20–25s) | `GET http://localhost:8000/health` returns HTTP 200 `{"status": "healthy", "index_present": true}` |
+| **Without Pre-Built Vector Index** (cold startup requiring corpus ingestion) | Clean clone + `make ingest` (parsing 3 regulatory PDFs, chunking 44 statutory clauses, sentence-transformer embeddings, SQLite vector table population) | **35–45 seconds** (Ingestion pipeline: ~15–18s; Container boot & healthchecks: ~20s) | `make clean-clone-test` finishes end-to-end reference case triage verification |
+
 ### 3. Verify System Health
 Check that all containers and dependencies (`redis`, `stub-llm`, `api`) are healthy:
 ```bash
@@ -265,7 +272,21 @@ curl -s -X POST http://localhost:8000/v1/reports \
     "narrative": "Admitted to the burn unit for acute epidermal detachment."
   }' | jq .
 ```
-*Expected response (HTTP 202 Accepted):*
+
+### 5. Run the 10-Item Comprehensive Demonstration
+To execute all 10 evaluation demonstration items with step-by-step pauses and live verification:
+```bash
+bash ./scripts/demo.sh             # Interactive mode (pauses between steps)
+AUTO_STEP=1 bash ./scripts/demo.sh # Automated continuous execution
+```
+
+### 6. Clean-Clone Verification Test
+To verify the entire platform from an isolated clean clone in `/tmp`:
+```bash
+make clean-clone-test
+```
+
+*Expected response for report submission (HTTP 202 Accepted):*
 ```json
 {
   "run_id": "rep_demo_001",

@@ -11,33 +11,24 @@ import logging
 import os
 import sys
 import time
-from prometheus_client import Counter, Gauge, Histogram, start_http_server
+from prometheus_client import Gauge, start_http_server
 import redis
-from rq import Queue, Worker
+from rq import Queue, SimpleWorker
 
 from api.logging_setup import setup_logging
+from shared.metrics import QUEUE_DEPTH
 from worker.tasks import rq_exception_handler
 
-# Worker Prometheus Metrics
-WORKER_JOBS_TOTAL = Counter(
-    "worker_jobs_total",
-    "Total triage jobs processed by worker instances",
-    ["status"],
-)
-WORKER_JOB_DURATION = Histogram(
-    "worker_job_duration_seconds",
-    "Duration of triage graph execution in worker",
-)
+logger = setup_logging("worker")
+
 WORKER_ACTIVE_GAUGE = Gauge(
     "worker_active",
     "Worker heartbeat / liveness indicator",
 )
 
-logger = setup_logging("worker")
-
 
 def main() -> None:
-    # 1. Start Prometheus HTTP metrics exporter
+    # 1. Start Prometheus HTTP metrics exporter on port 8002
     metrics_port = int(os.getenv("METRICS_PORT", "8002"))
     try:
         start_http_server(metrics_port)
@@ -48,7 +39,21 @@ def main() -> None:
     WORKER_ACTIVE_GAUGE.set(1)
 
     # 2. Redis Connection with retry
-    redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
+    raw_redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
+    try:
+        import socket
+        from urllib.parse import urlparse
+        parsed = urlparse(raw_redis_url)
+        if parsed.hostname == "redis":
+            try:
+                socket.gethostbyname("redis")
+                redis_url = raw_redis_url
+            except (socket.gaierror, OSError):
+                redis_url = raw_redis_url.replace("redis://redis:", "redis://localhost:")
+        else:
+            redis_url = raw_redis_url
+    except Exception:
+        redis_url = raw_redis_url
     logger.info("Starting RQ worker, connecting to %s...", redis_url)
 
     retries = 15
@@ -69,7 +74,12 @@ def main() -> None:
         sys.exit(1)
 
     queue = Queue("runs", connection=conn)
-    worker = Worker(
+    try:
+        QUEUE_DEPTH.set(len(queue))
+    except Exception:
+        pass
+
+    worker = SimpleWorker(
         [queue],
         connection=conn,
         exception_handlers=[rq_exception_handler],
