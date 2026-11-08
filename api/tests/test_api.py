@@ -219,3 +219,114 @@ def test_feedback_endpoint_not_found(monkeypatch):
     res = client.post("/v1/runs/unknown_run_xyz/feedback", json={"rating": "thumbs_up", "reason": "Accurate assessment"})
     assert res.status_code == 404
 
+
+def test_rate_limiting_429(monkeypatch):
+    """Verify that requests exceeding RATE_LIMIT_PER_MIN return HTTP 429 with Retry-After header."""
+    from api import main
+    monkeypatch.setattr(main, "check_rate_limit", lambda r, cid, limit: (False, 15))
+
+    client = TestClient(app)
+    res = client.post("/v1/reports", json={"dummy": "payload"}, headers={"X-Client-ID": "test_burst_client"})
+    assert res.status_code == 429
+    assert res.headers.get("retry-after") == "15"
+    data = res.json()
+    assert "Rate limit exceeded" in data["detail"]
+    assert data["retry_after"] == 15
+    assert data["client_id"] == "test_burst_client"
+
+
+def test_cache_hit_returns_completed_immediately(monkeypatch):
+    """Verify that submitting an identical report hits the Redis whole-run cache and returns completed without queueing."""
+    from api import main
+
+    store = {}
+    class FakeRedis:
+        def eval(self, *args, **kwargs):
+            return [1, 0, 59]
+        def get(self, key):
+            return store.get(key)
+        def set(self, key, val, *args, **kwargs):
+            store[key] = val
+        def lpush(self, key, val):
+            store.setdefault(key, []).append(val)
+
+    monkeypatch.setattr(main, "get_redis_client", lambda: FakeRedis())
+
+    # Pre-populate cache with a completed RunResult
+    dummy_result = {
+        "run_id": "cached_run_original",
+        "status": "completed",
+        "routing": "expedited",
+        "routing_basis": "Reported serious adverse reaction",
+        "seriousness": {"is_serious": True, "criteria": ["hospitalisation"]},
+        "expectedness": {"is_listed": False, "matched_term": None},
+        "citations": [{"passage_id": "chunk_001", "quote": "Must be reported"}],
+    }
+
+    from api.models import AdverseEventReport, ReporterType, Outcome, PatientSex
+    today = date.today()
+    sample_report = AdverseEventReport(
+        report_id="rep_orig_999",
+        reporter_type=ReporterType.PHYSICIAN,
+        patient_sex=PatientSex.FEMALE,
+        suspect_drug="Lamotrigine",
+        drug_start_date=today - timedelta(days=10),
+        event_date=today - timedelta(days=5),
+        reaction_description="Toxic epidermal necrolysis",
+        outcome=Outcome.NOT_RECOVERED,
+    )
+    rep_hash = main.compute_report_hash(sample_report)
+    store[f"cache:report:{rep_hash}"] = json.dumps(dummy_result)
+
+    client = TestClient(app)
+    payload = sample_report.model_dump(mode="json")
+    payload["report_id"] = "rep_repeat_123"
+
+    res = client.post("/v1/reports", json=payload, headers={"X-Client-ID": "test_client"})
+    assert res.status_code == 202
+    data = res.json()
+    assert data["run_id"] == "rep_repeat_123"
+    assert data["status"] == "completed"
+    assert data["cached"] is True
+
+
+def test_feedback_record_and_summary(monkeypatch):
+    """Verify POST /v1/runs/{id}/feedback with satisfactory boolean and GET /v1/feedback/summary."""
+    from api import main
+    store = {
+        "run:rep_fb_1:state": "completed",
+        "run:rep_fb_2:state": "completed",
+        "runs:feedback": [
+            json.dumps({"run_id": "rep_fb_1", "satisfactory": True, "rating": "thumbs_up", "reason": "Accurate routing"}),
+            json.dumps({"run_id": "rep_fb_2", "satisfactory": False, "rating": "thumbs_down", "reason": "Missed clause"}),
+        ]
+    }
+
+    class FakeRedis:
+        def get(self, key):
+            return store.get(key)
+        def set(self, key, val, *args, **kwargs):
+            store[key] = val
+        def lpush(self, key, val):
+            store.setdefault(key, []).append(val)
+        def lrange(self, key, start, stop):
+            return store.get(key, [])
+
+    monkeypatch.setattr(main, "get_redis_client", lambda: FakeRedis())
+
+    client = TestClient(app)
+    post_res = client.post("/v1/runs/rep_fb_1/feedback", json={"satisfactory": True, "reason": "Verified accurate"})
+    assert post_res.status_code == 200
+    pdata = post_res.json()
+    assert pdata["satisfactory"] is True
+    assert pdata["status"] == "recorded"
+
+    sum_res = client.get("/v1/feedback/summary")
+    assert sum_res.status_code == 200
+    sdata = sum_res.json()
+    assert sdata["total_feedback"] >= 2
+    assert sdata["satisfactory_count"] >= 1
+    assert sdata["unsatisfactory_count"] >= 1
+    assert "satisfaction_rate" in sdata
+
+
