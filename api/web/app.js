@@ -667,6 +667,7 @@
     if (!activeRunId || !selectedFeedbackRating) return;
 
     const payload = {
+      satisfactory: selectedFeedbackRating === "thumbs_up",
       rating: selectedFeedbackRating,
       reason: feedbackReason.value.trim() || null
     };

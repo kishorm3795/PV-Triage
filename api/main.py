@@ -8,6 +8,7 @@ OpenTelemetry tracing to Jaeger, Prometheus metrics, and full trace reconstructi
 from __future__ import annotations
 
 import datetime
+import hashlib
 import json
 import logging
 import os
@@ -29,10 +30,14 @@ from rq.registry import FailedJobRegistry
 from api.logging_setup import get_correlation_id, set_correlation_id, setup_logging
 from api.models import AdverseEventReport
 from shared.metrics import (
+    CIRCUIT_BREAKER_STATE,
     HTTP_REQUEST_DURATION,
     HTTP_REQUESTS_TOTAL,
     QUEUE_DEPTH,
     QUARANTINE_TOTAL,
+    RATE_LIMIT_EXCEEDED_TOTAL,
+    REPORT_CACHE_HITS_TOTAL,
+    REPORT_CACHE_MISSES_TOTAL,
     RUN_ERRORS_TOTAL,
     RUNS_BY_STATUS_TOTAL,
 )
@@ -233,20 +238,124 @@ def metrics():
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
+RATE_LIMIT_LUA = """
+local key_tokens = KEYS[1]
+local key_ts = KEYS[2]
+local capacity = tonumber(ARGV[1])
+local refill_rate = tonumber(ARGV[2])
+local now = tonumber(ARGV[3])
+local cost = tonumber(ARGV[4])
+
+local last_tokens = tonumber(redis.call('get', key_tokens))
+local last_ts = tonumber(redis.call('get', key_ts))
+
+if last_tokens == nil then
+    last_tokens = capacity
+    last_ts = now
+else
+    local elapsed = math.max(0, now - last_ts)
+    last_tokens = math.min(capacity, last_tokens + elapsed * refill_rate)
+    last_ts = now
+end
+
+if last_tokens >= cost then
+    last_tokens = last_tokens - cost
+    redis.call('set', key_tokens, last_tokens, 'EX', 120)
+    redis.call('set', key_ts, last_ts, 'EX', 120)
+    return {1, 0, math.floor(last_tokens)}
+else
+    local needed = cost - last_tokens
+    local retry_after = math.ceil(needed / refill_rate)
+    if retry_after < 1 then retry_after = 1 end
+    redis.call('set', key_tokens, last_tokens, 'EX', 120)
+    redis.call('set', key_ts, last_ts, 'EX', 120)
+    return {0, retry_after, 0}
+end
+"""
+
+
+def check_rate_limit(r: redis.Redis, client_id: str, limit_per_min: int) -> tuple[bool, int]:
+    """Check Redis token bucket rate limit for client. Returns (allowed, retry_after_seconds)."""
+    if limit_per_min <= 0:
+        return True, 0
+    now = time.time()
+    refill_rate = limit_per_min / 60.0
+    key_tokens = f"ratelimit:{client_id}:tokens"
+    key_ts = f"ratelimit:{client_id}:ts"
+    try:
+        res = r.eval(RATE_LIMIT_LUA, 2, key_tokens, key_ts, limit_per_min, refill_rate, now, 1)
+        allowed = bool(res[0] == 1)
+        retry_after = int(res[1])
+        return allowed, retry_after
+    except Exception as e:
+        logger.warning("Redis rate limit evaluation failed: %s; allowing request", e)
+        return True, 0
+
+
+def compute_report_hash(report: AdverseEventReport) -> str:
+    """Compute deterministic SHA-256 hash of normalized adverse event report."""
+    reporter_val = report.reporter_type.value if hasattr(report.reporter_type, "value") else str(report.reporter_type)
+    patient_sex_val = (report.patient_sex.value if hasattr(report.patient_sex, "value") else str(report.patient_sex)) if report.patient_sex else None
+    outcome_val = (report.outcome.value if hasattr(report.outcome, "value") else str(report.outcome)) if report.outcome else None
+
+    norm = {
+        "reporter_type": str(reporter_val).lower().strip(),
+        "patient_age": report.patient_age,
+        "patient_sex": str(patient_sex_val).lower().strip() if patient_sex_val else None,
+        "suspect_drug": report.suspect_drug.strip().lower(),
+        "drug_start_date": report.drug_start_date.isoformat() if report.drug_start_date else None,
+        "event_date": report.event_date.isoformat() if report.event_date else None,
+        "reaction_description": " ".join(report.reaction_description.strip().lower().split()),
+        "outcome": str(outcome_val).lower().strip() if outcome_val else None,
+        "narrative": " ".join(report.narrative.strip().lower().split()) if report.narrative else None,
+    }
+    canonical_json = json.dumps(norm, sort_keys=True)
+    return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+
+
 @app.post("/v1/reports", status_code=status.HTTP_202_ACCEPTED)
 async def submit_report(request: Request):
     """
     Intake boundary for adverse event reports.
-    Validates FIRST:
-      - If invalid: quarantined in Redis with field-level errors, returns HTTP 422, enqueues NOTHING.
-      - If valid: enqueues RQ job with RUN_TIMEOUT_S timeout, returns HTTP 202 with run_id immediately.
+    1. Enforces per-client token bucket rate limiting (RATE_LIMIT_PER_MIN) returning 429.
+    2. Validates report schema: malformed quarantined with HTTP 422.
+    3. Normalizes valid report and checks whole-run cache: cache hit returns HTTP 202 completed immediately.
+    4. Cache miss enqueues RQ job with RUN_TIMEOUT_S timeout.
     """
+    r = get_redis_client()
+
+    # Step 0: Rate Limiting
+    client_id = (
+        request.headers.get("X-Client-ID")
+        or request.headers.get("client-id")
+        or (request.client.host if request.client else "anonymous")
+    )
+    rate_limit_per_min = int(os.getenv("RATE_LIMIT_PER_MIN", "60"))
+    allowed, retry_after = check_rate_limit(r, client_id, rate_limit_per_min)
+    if not allowed:
+        RATE_LIMIT_EXCEEDED_TOTAL.labels(client_id=client_id).inc()
+        HTTP_REQUESTS_TOTAL.labels(method="POST", endpoint="/v1/reports", status="429").inc()
+        logger.warning(
+            "Rate limit exceeded for client '%s' (limit=%d/min). Retry-After=%ds",
+            client_id,
+            rate_limit_per_min,
+            retry_after,
+            extra={"client_id": client_id, "retry_after": retry_after},
+        )
+        return JSONResponse(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            content={
+                "detail": f"Rate limit exceeded. Try again in {retry_after} seconds.",
+                "retry_after": retry_after,
+                "client_id": client_id,
+            },
+            headers={"Retry-After": str(retry_after)},
+        )
+
     try:
         body = await request.json()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
-
-    r = get_redis_client()
 
     # Step 1: Validation
     try:
@@ -299,7 +408,44 @@ async def submit_report(request: Request):
     report_dict = report.model_dump(mode="json")
     now_iso = _get_utc_now_iso()
 
-    # Record initial queued state and timestamps
+    # Step 2a: Report Normalization & Whole-Run Cache Check
+    report_hash = compute_report_hash(report)
+    cached_result_json = r.get(f"cache:report:{report_hash}")
+    if cached_result_json:
+        try:
+            cached_result = json.loads(cached_result_json)
+            cached_result["run_id"] = run_id
+            r.set(f"run:{run_id}:state", "completed")
+            r.set(f"run:{run_id}:result", json.dumps(cached_result))
+            r.set(f"run:{run_id}:created_at", now_iso)
+            r.set(f"run:{run_id}:queued_at", now_iso)
+            r.set(f"run:{run_id}:started_at", now_iso)
+            r.set(f"run:{run_id}:finished_at", now_iso)
+            r.set(f"run:{run_id}:updated_at", now_iso)
+            r.set(f"run:{run_id}:cached", "true")
+            r.set(f"run:{run_id}:report", json.dumps(report_dict))
+            r.set(f"run:{run_id}:report_hash", report_hash)
+            REPORT_CACHE_HITS_TOTAL.inc()
+            RUNS_BY_STATUS_TOTAL.labels(status="completed").inc()
+            logger.info(
+                "Cache hit for report %s (hash=%s). Reusing cached triage result.",
+                run_id,
+                report_hash,
+                extra={"run_id": run_id, "cache_hit": True, "report_hash": report_hash},
+            )
+            return {
+                "run_id": run_id,
+                "status": "completed",
+                "created_at": now_iso,
+                "cached": True,
+                "message": "Report matched existing cached triage assessment.",
+            }
+        except Exception as e:
+            logger.warning("Failed to deserialize cached result for %s: %s", run_id, e)
+
+    # Step 2b: Cache Miss -> Enqueue to RQ
+    REPORT_CACHE_MISSES_TOTAL.inc()
+    r.set(f"run:{run_id}:report_hash", report_hash)
     r.set(f"run:{run_id}:state", "queued")
     r.set(f"run:{run_id}:created_at", now_iso)
     r.set(f"run:{run_id}:queued_at", now_iso)
@@ -602,7 +748,8 @@ def list_quarantine():
 
 class FeedbackRequest(BaseModel):
     """Payload for human evaluator feedback."""
-    rating: str  # "thumbs_up" | "thumbs_down"
+    satisfactory: Optional[bool] = None
+    rating: Optional[str] = None  # backwards compat: "thumbs_up" | "thumbs_down"
     reason: Optional[str] = None
 
 
@@ -617,16 +764,60 @@ async def record_feedback(run_id: str, feedback: FeedbackRequest):
     if not state:
         raise HTTPException(status_code=404, detail=f"Run '{run_id}' not found")
 
+    is_sat = True
+    if feedback.satisfactory is not None:
+        is_sat = bool(feedback.satisfactory)
+    elif feedback.rating is not None:
+        is_sat = (feedback.rating.lower() == "thumbs_up")
+
+    rating_str = feedback.rating or ("thumbs_up" if is_sat else "thumbs_down")
     record = {
         "run_id": run_id,
-        "rating": feedback.rating,
+        "satisfactory": is_sat,
+        "rating": rating_str,
         "reason": feedback.reason,
         "recorded_at": _get_utc_now_iso(),
     }
     r.set(f"run:{run_id}:feedback", json.dumps(record))
     r.lpush("runs:feedback", json.dumps(record))
-    logger.info("Feedback recorded for run %s: rating=%s", run_id, feedback.rating)
-    return {"status": "recorded", "run_id": run_id, "rating": feedback.rating}
+    logger.info("Feedback recorded for run %s: satisfactory=%s", run_id, is_sat)
+    return {
+        "status": "recorded",
+        "run_id": run_id,
+        "satisfactory": is_sat,
+        "rating": rating_str,
+        "reason": feedback.reason,
+    }
+
+
+@app.get("/v1/feedback/summary")
+async def get_feedback_summary():
+    """Retrieve statistical aggregate of human evaluator feedback."""
+    r = get_redis_client()
+    raw_items = r.lrange("runs:feedback", 0, -1)
+    items = []
+    sat_count = 0
+    unsat_count = 0
+    for item in raw_items:
+        try:
+            rec = json.loads(item)
+            items.append(rec)
+            if rec.get("satisfactory") is True:
+                sat_count += 1
+            elif rec.get("satisfactory") is False:
+                unsat_count += 1
+        except Exception:
+            pass
+    total = len(items)
+    rate = (sat_count / total) if total > 0 else 0.0
+    return {
+        "total_feedback": total,
+        "satisfactory_count": sat_count,
+        "unsatisfactory_count": unsat_count,
+        "satisfaction_rate": round(rate, 4),
+        "recent_feedback": items[:50],
+    }
+
 
 
 # Mount the single-page clinical web client at "/"
