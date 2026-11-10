@@ -9,13 +9,13 @@
 
 ## 1. Document Inventory and Text Layer Audit
 
-Each source document in `./corpus` was inspected using PyMuPDF (`fitz`) to verify page counts, digital text layer presence, and OCR requirements.
+Each source document in `./corpus` was inspected using `pypdf` / PyMuPDF (`fitz`) to verify page counts, SHA256 checksums, byte sizes, digital text layer presence, and OCR requirements.
 
-| Document Title | Version / Date | Official Source URL | Page Count | Text Layer Status | OCR Required? |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **New Drugs and Clinical Trials Rules, 2019** (Gazette Notification G.S.R. 227(E)) | March 19, 2019 | [CDSCO Gazette Portal](https://cdsco.gov.in/opencms/resources/UploadCDSCOWeb/2018/UploadGazette_NotificationsFiles/gsr227e.pdf) | 264 pages | Digital text layer present across all 264 pages (264/264) | **No** (Direct extraction supported) |
-| **Pharmacovigilance Guidance Document for Marketing Authorization Holders of Pharmaceutical Products** | Version 2.0 (September 2024) | [CDSCO Post-Marketing DSM Portal](https://cdsco.gov.in/opencms/resources/UploadCDSCOWeb/2024/PSURFiles/Guidance_Documentpsur2.pdf) | 86 pages | Digital text layer present on 83/86 pages (pages 2, 4, 85 are blank/dividers) | **No** (Direct extraction supported) |
-| **LAMICTAL (lamotrigine) Full Prescribing Information** | Revised April 2025 (Reference ID: 5579217) | [FDA CDER Drugs@FDA Database](https://www.accessdata.fda.gov/drugsatfda_docs/label/2025/020241s066s067,020764s059s060,022251s030s031lbl.pdf) | 71 pages | Digital text layer present across all 71 pages (71/71) | **No** (Direct extraction supported) |
+| Document Title | Filename | Version / Date | Official Source URL | Pages | Size (bytes) | SHA-256 Checksum | Text Layer Status |
+| :--- | :--- | :--- | :--- | :---: | :---: | :--- | :--- |
+| **New Drugs and Clinical Trials Rules, 2019** (Gazette Notification G.S.R. 227(E)) | `corpus/ndct_rules_2019.pdf` | March 19, 2019 | [CDSCO Gazette Portal](https://cdsco.gov.in/opencms/resources/UploadCDSCOWeb/2018/UploadGazette_NotificationsFiles/gsr227e.pdf) | 264 | 2,516,966 | `3931eecc57f0e86e8c52f7d2bf9059d233c6b3402f25cfbde140bfccdd3904ed` | Digital text layer present (264/264) |
+| **Pharmacovigilance Guidance Document for Marketing Authorization Holders of Pharmaceutical Products** | `corpus/ipc_pv_guidance_mah.pdf` | Version 2.0 (September 2024) | [CDSCO Post-Marketing DSM Portal](https://cdsco.gov.in/opencms/resources/UploadCDSCOWeb/2024/PSURFiles/Guidance_Documentpsur2.pdf) | 86 | 5,886,144 | `9142de7460f75d5c52a4c7baa49416883f751b738ce39263f6cc84834eb3f09d` | Digital text layer present (83/86; dividers blank) |
+| **LAMICTAL (lamotrigine) Full Prescribing Information** | `corpus/lamotrigine_package_insert.pdf` | Revised April 2025 (Reference ID: 5579217) | [FDA CDER Drugs@FDA Database](https://www.accessdata.fda.gov/drugsatfda_docs/label/2025/020241s066s067,020764s059s060,022251s030s031lbl.pdf) | 71 | 853,233 | `a04a2ab7a291b191c0c34f08f15e8c95217f6af23f6e3459d47acb96910b5678` | Digital text layer present (71/71) |
 
 ---
 
