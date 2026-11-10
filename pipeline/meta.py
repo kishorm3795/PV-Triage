@@ -9,7 +9,15 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from prometheus_client import Gauge, CollectorRegistry
+try:
+    from prometheus_client import Gauge, CollectorRegistry
+except ImportError:
+    class DummyGauge:
+        def __init__(self, *args, **kwargs): pass
+        def labels(self, *args, **kwargs): return self
+        def set(self, *args, **kwargs): pass
+    Gauge = DummyGauge
+    CollectorRegistry = None
 
 CHROMA_DIR = os.getenv("CHROMA_DIR", "./data/chroma")
 
