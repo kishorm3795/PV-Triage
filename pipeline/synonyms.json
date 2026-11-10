@@ -80,5 +80,33 @@
     "respiratory distress",
     "bronchospasm",
     "angioedema"
+  ],
+  "swollen throat": [
+    "angioedema",
+    "pharyngeal edema",
+    "laryngeal edema",
+    "asphyxiation"
+  ],
+  "sores in mouth": [
+    "mucosal erosions",
+    "stomatitis",
+    "Stevens-Johnson syndrome",
+    "oral ulceration"
+  ],
+  "lips cracked open": [
+    "mucosal erosions",
+    "cheilitis",
+    "Stevens-Johnson syndrome"
+  ],
+  "low white blood cells": [
+    "neutropenia",
+    "agranulocytosis",
+    "leukopenia",
+    "blood dyscrasia"
+  ],
+  "severe belly pain": [
+    "acute pancreatitis",
+    "pancreatitis",
+    "abdominal pain"
   ]
 }
