@@ -158,6 +158,8 @@ def extract_text_with_structure(
 ) -> List[Tuple[int, str, Optional[str], Optional[str]]]:
     """Extract text from PDF preserving page structure and identifying clauses/sections.
 
+    Robustly handles empty pages, whitespace-only pages, unparseable blocks,
+    and missing content gracefully.
     Returns list of (page_num, text, clause_id, section) tuples.
     """
     results: List[Tuple[int, str, Optional[str], Optional[str]]] = []
@@ -166,28 +168,37 @@ def extract_text_with_structure(
 
     if fitz is not None:
         doc = fitz.open(pdf_path)
-        for page_num in range(len(doc)):
-            page = doc[page_num]
-            blocks = page.get_text("blocks")
-            for block in blocks:
-                text = block[4].strip()
-                if not text:
-                    continue
-                clause_id, section = _detect_heading(text)
-                if section:
-                    current_section = section
-                if clause_id:
-                    current_clause = clause_id
-                results.append((page_num + 1, text, current_clause, current_section))
-        doc.close()
+        try:
+            for page_num in range(len(doc)):
+                page = doc[page_num]
+                blocks = page.get_text("blocks") or []
+                for block in blocks:
+                    if len(block) < 5 or not isinstance(block[4], str):
+                        continue
+                    text = block[4].strip()
+                    if not text:
+                        continue
+                    clause_id, section = _detect_heading(text)
+                    if section:
+                        current_section = section
+                    if clause_id:
+                        current_clause = clause_id
+                    results.append((page_num + 1, text, current_clause, current_section))
+        finally:
+            doc.close()
     elif pypdf is not None:
         reader = pypdf.PdfReader(pdf_path)
         for page_num, page in enumerate(reader.pages):
-            page_text = page.extract_text() or ""
+            try:
+                page_text = page.extract_text() or ""
+            except Exception:
+                page_text = ""
             paragraphs = [p.strip() for p in page_text.split("\n\n") if p.strip()]
             if not paragraphs:
                 paragraphs = [l.strip() for l in page_text.splitlines() if l.strip()]
             for p_text in paragraphs:
+                if not p_text.strip():
+                    continue
                 clause_id, section = _detect_heading(p_text)
                 if section:
                     current_section = section
