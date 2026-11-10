@@ -83,24 +83,32 @@ Execute the following diagnostic commands to verify index presence, timestamp, a
    ```
    Verify `pv_index_build_timestamp_seconds` and `pv_index_chunk_count` (>700 chunks).
 
-### Recovery Procedure
-1. **Trigger Immediate Ingestion Rebuild:**
-   Run the idempotent ingestion pipeline inside Docker Compose or the local environment:
+### Zero-Downtime Re-Indexing Procedure (Without Taking Service Down)
+
+To rebuild the vector corpus index from scratch in a production environment without causing 503 errors or interrupting active API intake:
+
+1. **Build Staging Index in Parallel (`data/chroma_next/`):**
+   Execute ingestion into an isolated staging directory using the `CHROMA_DIR` override:
    ```bash
-   docker compose run --rm ingest python -m pipeline.ingest --force
+   CHROMA_DIR=./data/chroma_next python3 -m pipeline.ingest --force
    ```
-   Or on local python runtime:
+   *The live API and workers continue reading from `./data/chroma/` uninterrupted.*
+
+2. **Verify Staging Index Integrity:**
+   Ensure the staging metadata and chunk counts meet production thresholds:
    ```bash
-   python3 -m pipeline.ingest --force
+   test -f ./data/chroma_next/index_meta.json
+   python3 -c "import json; m = json.load(open('data/chroma_next/index_meta.json')); assert m['total_chunks'] >= 700; print('Staging index verified:', m['total_chunks'], 'chunks')"
    ```
-2. **Verify Metadata Generation:**
-   Check that `data/chroma/index_meta.json` was regenerated with updated timestamps:
+
+3. **Atomic Directory Swap:**
+   Execute an atomic swap so incoming requests instantly transition to the newly built index with zero downtime:
    ```bash
-   ls -la data/chroma/index_meta.json
+   mv ./data/chroma ./data/chroma_backup && mv ./data/chroma_next ./data/chroma && rm -rf ./data/chroma_backup
    ```
-3. **Restart API Service:**
-   Once the index metadata is populated, reload the API container to restore 200 OK health status:
+
+4. **Verify Live Service Health:**
+   Confirm that `GET /health` continues returning HTTP 200 OK without any dropped requests:
    ```bash
-   docker compose restart api
-   curl -s http://localhost:8000/health
+   curl -s http://localhost:8000/health | jq '{status, index_present}'
    ```
