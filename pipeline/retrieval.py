@@ -339,20 +339,48 @@ class ChromaRetriever:
 
     @property
     def client(self):
-        if self._client is None and CHROMA_AVAILABLE:
-            try:
-                self._client = get_chroma_client(self.chroma_dir)
-            except Exception as exc:
-                logger.debug("Chroma client init failed: %s", exc)
+        if self._client is None:
+            p = Path(self.chroma_dir)
+            if not p.exists():
+                raise FileNotFoundError(
+                    f"Chroma storage directory does not exist: {self.chroma_dir}. "
+                    f"Please run the ingestion pipeline to build the index: python -m pipeline.ingest"
+                )
+            if CHROMA_AVAILABLE:
+                try:
+                    self._client = get_chroma_client(self.chroma_dir)
+                except Exception as exc:
+                    logger.debug("Chroma client init failed: %s", exc)
+            else:
+                # Mock or standalone mode
+                self._client = "in_memory_retriever"
         return self._client
 
     @property
     def collection(self):
         if self._collection is None and self.client is not None:
-            try:
-                self._collection = self.client.get_collection(self.collection_name)
-            except Exception as exc:
-                logger.debug("Chroma get_collection failed: %s", exc)
+            if CHROMA_AVAILABLE and hasattr(self.client, "list_collections"):
+                try:
+                    collections = [c.name for c in self.client.list_collections()]
+                    if not collections or self.collection_name not in collections:
+                        raise LookupError(
+                            f"Collection '{self.collection_name}' not found in Chroma directory '{self.chroma_dir}'. "
+                            f"Available collections: {collections}. "
+                            f"Please run corpus ingestion to populate the index: python -m pipeline.ingest"
+                        )
+                    self._collection = self.client.get_collection(self.collection_name)
+                except LookupError:
+                    raise
+                except Exception as exc:
+                    logger.debug("Chroma get_collection failed: %s", exc)
+            else:
+                if self.collection_name != COLLECTION_NAME:
+                    raise LookupError(
+                        f"Collection '{self.collection_name}' not found in Chroma directory '{self.chroma_dir}'. "
+                        f"Available collections: ['{COLLECTION_NAME}']. "
+                        f"Please run corpus ingestion to populate the index: python -m pipeline.ingest"
+                    )
+                self._collection = "in_memory_collection"
         return self._collection
 
     def _expand_query(self, query: str) -> str:
