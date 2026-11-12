@@ -59,6 +59,9 @@ MAX_STEPS = int(os.getenv("MAX_STEPS", "15"))
 MAX_TOOL_CALLS = int(os.getenv("MAX_TOOL_CALLS", "20"))
 RUN_TIMEOUT_S = float(os.getenv("RUN_TIMEOUT_S", "30.0"))
 
+# Phase 5: Deliberate change flag - controls whether Assessor searches for modifying provisions
+MODIFYING_PROVISION_SEARCH = os.getenv("MODIFYING_PROVISION_SEARCH", "on").lower().strip() == "on"
+
 KNOWN_CORPUS_DRUGS = ("lamotrigine", "lamictal")
 
 
@@ -495,17 +498,21 @@ def assessor_node(state: AgentState) -> AgentState:
 
         # --------------------------------------------------------------------
         # Required Path Step 3: Ask whether another provision modifies it & search
+        # Controlled by MODIFYING_PROVISION_SEARCH env flag (Phase 5 deliberate change)
         # --------------------------------------------------------------------
-        # Modifying rules: NDCT 2019 expedited 15-day reporting timeline to Central Licencing Authority
-        timeline_query = "statutory reporting timelines expedited fifteen calendar days CLA NDCT Rules 2019 Table 1"
-        timeline_passages = tools.search_corpus(timeline_query, k=3)
-        for p in timeline_passages:
-            if not any(existing.id == p.id for existing in retrieved_passages):
-                retrieved_passages.append(p)
+        if MODIFYING_PROVISION_SEARCH:
+            # Modifying rules: NDCT 2019 expedited 15-day reporting timeline to Central Licencing Authority
+            timeline_query = "statutory reporting timelines expedited fifteen calendar days CLA NDCT Rules 2019 Table 1"
+            timeline_passages = tools.search_corpus(timeline_query, k=3)
+            for p in timeline_passages:
+                if not any(existing.id == p.id for existing in retrieved_passages):
+                    retrieved_passages.append(p)
 
-        clause_timeline = tools.get_clause("ndct-2019-second-sched-table1")
-        if clause_timeline and not any(existing.id == clause_timeline.id for existing in retrieved_passages):
-            retrieved_passages.append(clause_timeline)
+            clause_timeline = tools.get_clause("ndct-2019-second-sched-table1")
+            if clause_timeline and not any(existing.id == clause_timeline.id for existing in retrieved_passages):
+                retrieved_passages.append(clause_timeline)
+        else:
+            logger.info("MODIFYING_PROVISION_SEARCH=off: Skipping modifying provision search step")
 
         # --------------------------------------------------------------------
         # Required Path Step 4: Re-query using terms taken from what it read
