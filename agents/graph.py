@@ -20,16 +20,29 @@ import datetime
 import logging
 import os
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+import requests
 from langgraph.graph import END, START, StateGraph
 
-from agents.state import AgentState
+from agents.state import AgentState, make_trace_detail
 from agents.tools import (
     ToolCallLimitExceeded,
     ToolTimeoutError,
     wrap_tools,
 )
+from guardrails.injection import (
+    FREE_TEXT_FIELDS,
+    check_input_injection,
+    wrap_with_delimiters,
+)
+from guardrails.output import check_output_guardrail
+from guardrails.toxicity import check_toxicity
 from llm.client import LLMClient
+from llm.resilience import (
+    CircuitBreakerOpenError,
+    LLMUnavailableError,
+    compute_token_cost,
+)
 from prompts.loader import load_prompt
 from shared.contracts import (
     Citation,
@@ -49,11 +62,9 @@ RUN_TIMEOUT_S = float(os.getenv("RUN_TIMEOUT_S", "30.0"))
 KNOWN_CORPUS_DRUGS = ("lamotrigine", "lamictal")
 
 
-def _calculate_cost(prompt_tokens: int, completion_tokens: int) -> float:
+def _calculate_cost(prompt_tokens: int, completion_tokens: int) -> Tuple[float, Optional[str]]:
     """Calculate USD cost from token counts and configured environment pricing."""
-    price_prompt = float(os.getenv("PRICE_PER_1K_PROMPT", "0.00015"))
-    price_comp = float(os.getenv("PRICE_PER_1K_COMPLETION", "0.00060"))
-    return (prompt_tokens / 1000.0 * price_prompt) + (completion_tokens / 1000.0 * price_comp)
+    return compute_token_cost(prompt_tokens, completion_tokens)
 
 
 def _check_bounds(state: AgentState, current_agent: str) -> Optional[AgentState]:
@@ -98,6 +109,116 @@ def _check_bounds(state: AgentState, current_agent: str) -> Optional[AgentState]
         }
 
     return None
+
+
+def input_guardrails_node(state: AgentState) -> AgentState:
+    """Pre-execution input guardrails: scan report free-text fields for injection and toxicity."""
+    step_count = state.get("step_count", 0) + 1
+    trace: List[TraceStep] = list(state.get("trace", []))
+    prompt_versions: Dict[str, str] = dict(state.get("prompt_versions", {}))
+    report = state.get("report", {})
+    run_id = state.get("run_id", "run_unknown")
+    prompt_ver = prompt_versions.get("assessor", os.getenv("PROMPT_VERSION", "v1"))
+
+    input_tokens = max(1, sum(len(str(v).split()) for v in report.values()))
+    ig_cost, ig_cost_flag = _calculate_cost(input_tokens, 0)
+
+    # 1. Prompt Injection Scan across all free-text fields
+    inj_result = check_input_injection(report, run_id=run_id)
+    if not inj_result.passed:
+        logger.warning("Input guardrail blocked report %s: %s", run_id, inj_result.reason)
+        trace.append(
+            TraceStep(
+                step=step_count,
+                agent="guardrail",
+                kind="input_guardrail",
+                latency_ms=1.0,
+                prompt_tokens=input_tokens,
+                completion_tokens=0,
+                cost_usd=ig_cost,
+                detail=make_trace_detail(
+                    prompt_version=prompt_ver,
+                    guardrail_name="injection",
+                    guardrail_result="block",
+                    guardrail_reason=inj_result.reason,
+                    llm_attempt=0,
+                    llm_retries=0,
+                    cost_flag=ig_cost_flag,
+                ),
+            )
+        )
+        return {
+            **state,
+            "step_count": step_count,
+            "trace": trace,
+            "status": "escalated",
+            "escalation_reason": "possible prompt injection",
+            "verification_passed": False,
+        }
+
+    # 2. Input Toxicity Scan across all free-text fields
+    for field in FREE_TEXT_FIELDS:
+        val = report.get(field)
+        if isinstance(val, str):
+            tox_result = check_toxicity(val, is_input=True, run_id=run_id)
+            if not tox_result.passed:
+                logger.warning("Input toxicity blocked report %s: %s", run_id, tox_result.reason)
+                trace.append(
+                    TraceStep(
+                        step=step_count,
+                        agent="guardrail",
+                        kind="input_guardrail",
+                        latency_ms=1.0,
+                        prompt_tokens=input_tokens,
+                        completion_tokens=0,
+                        cost_usd=ig_cost,
+                        detail=make_trace_detail(
+                            prompt_version=prompt_ver,
+                            guardrail_name="toxicity",
+                            guardrail_result="block",
+                            guardrail_reason=tox_result.reason,
+                            llm_attempt=0,
+                            llm_retries=0,
+                            cost_flag=ig_cost_flag,
+                        ),
+                    )
+                )
+                return {
+                    **state,
+                    "step_count": step_count,
+                    "trace": trace,
+                    "status": "escalated",
+                    "escalation_reason": "Toxic content detected in input report",
+                    "verification_passed": False,
+                }
+
+    # 3. Passed input guardrails -> log pass trace step
+    trace.append(
+        TraceStep(
+            step=step_count,
+            agent="guardrail",
+            kind="input_guardrail",
+            latency_ms=1.0,
+            prompt_tokens=input_tokens,
+            completion_tokens=1,
+            cost_usd=ig_cost,
+            detail=make_trace_detail(
+                prompt_version=prompt_ver,
+                guardrail_name="input_guardrails",
+                guardrail_result="pass",
+                guardrail_reason=None,
+                llm_attempt=0,
+                llm_retries=0,
+                cost_flag=ig_cost_flag,
+            ),
+        )
+    )
+
+    return {
+        **state,
+        "step_count": step_count,
+        "trace": trace,
+    }
 
 
 def assessor_node(state: AgentState) -> AgentState:
@@ -185,6 +306,7 @@ def assessor_node(state: AgentState) -> AgentState:
                         )
                     )
 
+            r_cost, r_cost_flag = _calculate_cost(180, 75)
             trace.append(
                 TraceStep(
                     step=step_count,
@@ -193,13 +315,15 @@ def assessor_node(state: AgentState) -> AgentState:
                     latency_ms=25.0,
                     prompt_tokens=180,
                     completion_tokens=75,
-                    cost_usd=_calculate_cost(180, 75),
-                    detail={
-                        "action": "retry_with_alternative_strategy",
-                        "retry_count": retry_count,
-                        "search_strategy": search_strategy,
-                        "citations_count": len(citations),
-                    },
+                    cost_usd=r_cost,
+                    detail=make_trace_detail(
+                        prompt_version=prompt_versions.get("assessor", "v1"),
+                        cost_flag=r_cost_flag,
+                        action="retry_with_alternative_strategy",
+                        retry_count=retry_count,
+                        search_strategy=search_strategy,
+                        citations_count=len(citations),
+                    ),
                 )
             )
 
@@ -504,17 +628,17 @@ def assessor_node(state: AgentState) -> AgentState:
         llm = LLMClient()
         llm_prompt = (
             f"ADVERSE EVENT REPORT:\n"
-            f"Suspect Drug: {suspect_drug}\n"
-            f"Reaction: {reaction_desc}\n"
+            f"Suspect Drug: {wrap_with_delimiters(suspect_drug, 'suspect_drug')}\n"
+            f"Reaction: {wrap_with_delimiters(reaction_desc, 'reaction_description')}\n"
             f"Outcome: {outcome}\n"
-            f"Narrative: {narrative}\n\n"
+            f"Narrative: {wrap_with_delimiters(narrative, 'narrative') if narrative else 'None'}\n\n"
             f"RETRIEVED PASSAGES ({len(retrieved_passages)}):\n"
             + "\n".join([f"[{p.id}] {p.text[:120]}..." for p in retrieved_passages])
         )
         llm_start = time.perf_counter()
         llm_resp = llm.generate(prompt=llm_prompt, system=assessor_prompt)
         llm_latency = (time.perf_counter() - llm_start) * 1000.0
-        cost = _calculate_cost(llm_resp.prompt_tokens, llm_resp.completion_tokens)
+        cost, cost_flag = _calculate_cost(llm_resp.prompt_tokens, llm_resp.completion_tokens)
 
         trace.append(
             TraceStep(
@@ -525,13 +649,19 @@ def assessor_node(state: AgentState) -> AgentState:
                 prompt_tokens=llm_resp.prompt_tokens,
                 completion_tokens=llm_resp.completion_tokens,
                 cost_usd=cost,
-                detail={
-                    "action": "draft_triage_assessment",
-                    "routing": routing,
-                    "is_serious": is_serious,
-                    "criteria": seriousness_criteria,
-                    "citations_count": len(citations),
-                },
+                detail=make_trace_detail(
+                    prompt_version=prompt_versions.get("assessor", "v1"),
+                    llm_attempt=getattr(llm_resp, "attempt", 1),
+                    llm_retries=getattr(llm_resp, "retries", 0),
+                    breaker_state=getattr(llm_resp, "breaker_state", "closed"),
+                    model=getattr(llm_resp, "model", "stub-llm"),
+                    cost_flag=cost_flag,
+                    action="draft_triage_assessment",
+                    routing=routing,
+                    is_serious=is_serious,
+                    criteria=seriousness_criteria,
+                    citations_count=len(citations),
+                ),
             )
         )
 
@@ -544,12 +674,46 @@ def assessor_node(state: AgentState) -> AgentState:
             "retrieved_passages": retrieved_passages,
             "routing": routing,
             "routing_basis": routing_basis,
+            "assessment_text": llm_resp.text if llm_resp else None,
             "seriousness": Seriousness(is_serious=is_serious, criteria=seriousness_criteria),
             "expectedness": Expectedness(is_listed=is_listed, matched_term=matched_term),
             "citations": citations,
             "status": "running",
         }
 
+    except (CircuitBreakerOpenError, LLMUnavailableError, requests.RequestException) as llm_err:
+        logger.warning("LLM unavailable or breaker open: %s", llm_err)
+        trace.append(
+            TraceStep(
+                step=step_count,
+                agent="assessor",
+                kind="llm_unavailable_escalation",
+                latency_ms=1.0,
+                prompt_tokens=0,
+                completion_tokens=0,
+                cost_usd=0.0,
+                detail=make_trace_detail(
+                    prompt_version=prompt_versions.get("assessor", "v1"),
+                    guardrail_name="none",
+                    guardrail_result="pass",
+                    llm_attempt=1,
+                    llm_retries=0,
+                    breaker_state="open",
+                    model="stub-llm",
+                    reason="LLM unavailable",
+                ),
+            )
+        )
+        return {
+            **state,
+            "step_count": step_count,
+            "tool_log": tool_log,
+            "trace": trace,
+            "prompt_versions": prompt_versions,
+            "status": "escalated",
+            "escalation_reason": "LLM unavailable",
+            "verification_passed": False,
+        }
     except (ToolCallLimitExceeded, ToolTimeoutError) as bound_err:
         return {
             **state,
@@ -603,6 +767,7 @@ def verifier_node(state: AgentState) -> AgentState:
 
         # If Assessor cleanly escalated (e.g., out-of-corpus drug, unclear timing), confirm and pass
         if state.get("status") == "escalated":
+            e_cost, e_flag = _calculate_cost(40, 20)
             trace.append(
                 TraceStep(
                     step=step_count,
@@ -611,8 +776,13 @@ def verifier_node(state: AgentState) -> AgentState:
                     latency_ms=5.0,
                     prompt_tokens=40,
                     completion_tokens=20,
-                    cost_usd=_calculate_cost(40, 20),
-                    detail={"action": "confirm_escalation", "reason": state.get("escalation_reason")},
+                    cost_usd=e_cost,
+                    detail=make_trace_detail(
+                        prompt_version=prompt_versions.get("verifier", "v1"),
+                        cost_flag=e_flag,
+                        action="confirm_escalation",
+                        reason=state.get("escalation_reason"),
+                    ),
                 )
             )
             return {
@@ -697,6 +867,7 @@ def verifier_node(state: AgentState) -> AgentState:
                     f"Verification audit failed (attempt {retry_count + 1}/2): {'; '.join(verification_errors)}"
                 )
                 logger.warning(feedback_msg)
+                v_cost, v_flag = _calculate_cost(90, 30)
                 trace.append(
                     TraceStep(
                         step=step_count,
@@ -705,13 +876,15 @@ def verifier_node(state: AgentState) -> AgentState:
                         latency_ms=12.0,
                         prompt_tokens=90,
                         completion_tokens=30,
-                        cost_usd=_calculate_cost(90, 30),
-                        detail={
-                            "verification_passed": False,
-                            "retry_count": retry_count + 1,
-                            "errors": verification_errors,
-                            "action": "retry_assessor_alternative_strategy",
-                        },
+                        cost_usd=v_cost,
+                        detail=make_trace_detail(
+                            prompt_version=prompt_versions.get("verifier", "v1"),
+                            verification_ok=False,
+                            verification_failed_checks=verification_errors,
+                            cost_flag=v_flag,
+                            retry_count=retry_count + 1,
+                            action="retry_assessor_alternative_strategy",
+                        ),
                     )
                 )
                 return {
@@ -732,6 +905,7 @@ def verifier_node(state: AgentState) -> AgentState:
                     f"Verification failed after 2 retries: {'; '.join(verification_errors)}"
                 )
                 logger.warning("Verification retries exhausted: %s", escalation_reason)
+                v_cost, v_flag = _calculate_cost(90, 30)
                 trace.append(
                     TraceStep(
                         step=step_count,
@@ -740,13 +914,15 @@ def verifier_node(state: AgentState) -> AgentState:
                         latency_ms=12.0,
                         prompt_tokens=90,
                         completion_tokens=30,
-                        cost_usd=_calculate_cost(90, 30),
-                        detail={
-                            "verification_passed": False,
-                            "retries_exhausted": True,
-                            "errors": verification_errors,
-                            "status": "escalated",
-                        },
+                        cost_usd=v_cost,
+                        detail=make_trace_detail(
+                            prompt_version=prompt_versions.get("verifier", "v1"),
+                            verification_ok=False,
+                            verification_failed_checks=verification_errors,
+                            cost_flag=v_flag,
+                            retries_exhausted=True,
+                            status="escalated",
+                        ),
                     )
                 )
                 return {
@@ -761,6 +937,7 @@ def verifier_node(state: AgentState) -> AgentState:
                 }
 
         # Verification succeeded!
+        v_cost, v_flag = _calculate_cost(95, 32)
         trace.append(
             TraceStep(
                 step=step_count,
@@ -769,13 +946,16 @@ def verifier_node(state: AgentState) -> AgentState:
                 latency_ms=15.0,
                 prompt_tokens=95,
                 completion_tokens=32,
-                cost_usd=_calculate_cost(95, 32),
-                detail={
-                    "verification_passed": True,
-                    "verified_citations": len(citations),
-                    "errors": [],
-                    "status": "completed",
-                },
+                cost_usd=v_cost,
+                detail=make_trace_detail(
+                    prompt_version=prompt_versions.get("verifier", "v1"),
+                    guardrail_name="none",
+                    guardrail_result="pass",
+                    verification_ok=True,
+                    verification_failed_checks=[],
+                    cost_flag=v_flag,
+                    status="completed",
+                ),
             )
         )
 
@@ -799,7 +979,11 @@ def verifier_node(state: AgentState) -> AgentState:
                 agent="verifier",
                 kind="crash_escalation",
                 latency_ms=1.0,
-                detail={"error": str(exc), "status": "escalated"},
+                detail=make_trace_detail(
+                    prompt_version=prompt_versions.get("verifier", "v1"),
+                    error=str(exc),
+                    status="escalated",
+                ),
             )
         )
         return {
@@ -813,29 +997,156 @@ def verifier_node(state: AgentState) -> AgentState:
         }
 
 
+def output_guardrails_node(state: AgentState) -> AgentState:
+    """Post-verification output guardrails: enforce recommendation boundaries and toxicity defense."""
+    step_count = state.get("step_count", 0) + 1
+    trace: List[TraceStep] = list(state.get("trace", []))
+    prompt_versions: Dict[str, str] = dict(state.get("prompt_versions", {}))
+    run_id = state.get("run_id", "run_unknown")
+    prompt_ver = prompt_versions.get("verifier", os.getenv("PROMPT_VERSION", "v1"))
+
+    # Only inspect if previous nodes succeeded (completed)
+    status = state.get("status")
+    if status != "completed":
+        return state
+
+    routing_basis = state.get("routing_basis", "") or ""
+    assessment_text = state.get("assessment_text", "") or ""
+    citations_text = " ".join([c.quote for c in state.get("citations", [])])
+    text_to_audit = f"{routing_basis} {assessment_text} {citations_text}".strip()
+
+    output_tokens = max(1, len(text_to_audit.split()))
+    og_cost, og_cost_flag = _calculate_cost(output_tokens, 0)
+
+    # 1. Output regulatory action claim check
+    out_result = check_output_guardrail(text_to_audit, run_id=run_id)
+    if not out_result.passed:
+        logger.warning("Output guardrail blocked report %s: %s", run_id, out_result.reason)
+        trace.append(
+            TraceStep(
+                step=step_count,
+                agent="guardrail",
+                kind="output_guardrail",
+                latency_ms=1.0,
+                prompt_tokens=output_tokens,
+                completion_tokens=0,
+                cost_usd=og_cost,
+                detail=make_trace_detail(
+                    prompt_version=prompt_ver,
+                    guardrail_name="output_guardrail",
+                    guardrail_result="block",
+                    guardrail_reason=out_result.reason,
+                    cost_flag=og_cost_flag,
+                ),
+            )
+        )
+        return {
+            **state,
+            "step_count": step_count,
+            "trace": trace,
+            "routing_basis": None,  # Do not return the prohibited text
+            "assessment_text": None,
+            "status": "escalated",
+            "escalation_reason": out_result.reason,
+            "verification_passed": False,
+        }
+
+    # 2. Output toxicity check
+    tox_result = check_toxicity(text_to_audit, is_input=False, run_id=run_id)
+    if not tox_result.passed:
+        logger.warning("Output toxicity blocked report %s: %s", run_id, tox_result.reason)
+        trace.append(
+            TraceStep(
+                step=step_count,
+                agent="guardrail",
+                kind="output_guardrail",
+                latency_ms=1.0,
+                prompt_tokens=output_tokens,
+                completion_tokens=0,
+                cost_usd=og_cost,
+                detail=make_trace_detail(
+                    prompt_version=prompt_ver,
+                    guardrail_name="output_toxicity",
+                    guardrail_result="block",
+                    guardrail_reason=tox_result.reason,
+                    cost_flag=og_cost_flag,
+                ),
+            )
+        )
+        return {
+            **state,
+            "step_count": step_count,
+            "trace": trace,
+            "routing_basis": None,
+            "assessment_text": None,
+            "status": "escalated",
+            "escalation_reason": "Output guardrail blocked: toxic content detected in model output",
+            "verification_passed": False,
+        }
+
+    # Output guardrail passed
+    trace.append(
+        TraceStep(
+            step=step_count,
+            agent="guardrail",
+            kind="output_guardrail",
+            latency_ms=1.0,
+            prompt_tokens=output_tokens,
+            completion_tokens=1,
+            cost_usd=og_cost,
+            detail=make_trace_detail(
+                prompt_version=prompt_ver,
+                guardrail_name="output_guardrail",
+                guardrail_result="pass",
+                guardrail_reason=None,
+                cost_flag=og_cost_flag,
+            ),
+        )
+    )
+
+    return {
+        **state,
+        "step_count": step_count,
+        "trace": trace,
+    }
+
+
+def _input_guardrail_router(state: AgentState) -> str:
+    """Route after input guardrail: if blocked (escalated), exit immediately; else proceed to assessor."""
+    if state.get("status") == "escalated":
+        return END
+    return "assessor"
+
+
 def _verifier_router(state: AgentState) -> str:
     """Conditional router following verifier execution."""
     status = state.get("status")
-    if status in ("completed", "failed"):
-        return END
-    if status == "escalated":
+    if status in ("failed", "escalated"):
         return END
 
     # If verification failed and retries remain, loop back to assessor
     if not state.get("verification_passed", False) and state.get("retry_count", 0) <= 2:
         return "assessor"
 
+    # If verification succeeded, proceed to output guardrails
+    if status == "completed":
+        return "output_guardrails"
+
     return END
 
 
 def create_triage_graph() -> Any:
-    """Build and compile the LangGraph triage workflow with verification loops."""
+    """Build and compile the LangGraph triage workflow with guardrails and verification loops."""
     workflow = StateGraph(AgentState)
+    workflow.add_node("input_guardrails", input_guardrails_node)
     workflow.add_node("assessor", assessor_node)
     workflow.add_node("verifier", verifier_node)
+    workflow.add_node("output_guardrails", output_guardrails_node)
 
-    workflow.add_edge(START, "assessor")
+    workflow.add_edge(START, "input_guardrails")
+    workflow.add_conditional_edges("input_guardrails", _input_guardrail_router, ["assessor", END])
     workflow.add_edge("assessor", "verifier")
-    workflow.add_conditional_edges("verifier", _verifier_router, ["assessor", END])
+    workflow.add_conditional_edges("verifier", _verifier_router, ["assessor", "output_guardrails", END])
+    workflow.add_edge("output_guardrails", END)
 
     return workflow.compile()

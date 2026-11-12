@@ -103,3 +103,110 @@ Per Phase 3 specifications and Global Rule 6 (*"An unverified or incomplete run 
 2. **Citation Integrity**: Every `Citation` in a `completed` run has `passage_id` present in `RunResult.tool_calls`/retrieved evidence and `quote in passage.text`.
 3. **Trace Accounting**: Every node execution records latency in milliseconds, prompt tokens, completion tokens, USD cost, and structured decision details.
 4. **Prompt Provenance**: Every participating agent records its prompt template version in `RunResult.prompt_versions` (`assessor`, `verifier`, `rewrite`).
+
+---
+
+## 5. Trace Detail Format (Phase 4 - Member A Sync Point)
+
+The `TraceStep.detail` field follows this exact schema to ensure consistent observability across agents, guardrails, and LLM resilience layers. Member A exposes this in the worker trace store and Prometheus/Jaeger integration.
+
+```python
+detail = {
+    "prompt_version": str,
+    "tool": str | null,
+    "query": str | null,
+    "passage_ids": [str],
+    "guardrail": {
+        "name": str,
+        "result": "pass" | "block",
+        "reason": str | null
+    },
+    "llm": {
+        "attempt": int,
+        "retries": int,
+        "breaker_state": "closed" | "open" | "half_open",
+        "model": str
+    },
+    "verification": {
+        "ok": bool,
+        "failed_checks": [str]
+    } | null
+}
+```
+
+**Field Notes:**
+- `prompt_version`: Always populated (e.g., "v1", "v2") for every step involving prompt execution.
+- `tool` / `query` / `passage_ids`: Populated for tool calls (`search_corpus`, `get_clause`, `rewrite_query`); `null` otherwise.
+- `guardrail`: Present on every guardrail step (`input_guardrail`, `output_guardrail`). `name` identifies the guardrail (`injection`, `toxicity`, `output_guardrail`, `output_toxicity`). `result` is `"pass"` or `"block"`. `reason` is `null` on pass, or the escalation reason on block.
+- `llm`: Populated on every LLM call step. `breaker_state` reflects the circuit breaker state **at the time of the call** (0=closed, 1=half_open, 2=open exposed as strings). `attempt` is 1-indexed; `retries` is count of retry attempts already made.
+- `verification`: Populated on `verification_audit`, `verification_rejected`, `verification_escalated` steps. `ok` indicates pass/fail; `failed_checks` lists the specific adversarial check failures.
+- `cost_flag` (optional): Added when `PRICE_PER_1K_PROMPT` / `PRICE_PER_1K_COMPLETION` are not set; value is `"price not set"`.
+
+---
+
+## 6. Mermaid Workflow Diagram (Updated for Phase 4 Guardrails)
+
+```mermaid
+flowchart TD
+    START([START]) --> InputGuardrails[Input Guardrails Node]
+
+    subgraph "Input Guardrails"
+        InputGuardrails --> InjCheck{Injection Check}
+        InjCheck -- Block --> EscalateInj[Mark Escalated: Possible Prompt Injection]
+        InjCheck -- Pass --> ToxCheck{Toxicity Check}
+        ToxCheck -- Block --> EscalateTox[Mark Escalated: Toxic Input]
+        ToxCheck -- Pass --> Assessor[Assessor Agent Node]
+    end
+
+    subgraph "Assessor Node Execution"
+        Assessor --> CheckDates{Dates valid & consistent?}
+        CheckDates -- No: missing / inverted --> EscalateDates[Mark Escalated: Unclear Timing]
+        CheckDates -- Yes --> CheckDrug{Suspect drug in corpus?}
+        CheckDrug -- No: drug outside corpus --> EscalateDrug[Mark Escalated: Out-of-Corpus Drug]
+        CheckDrug -- Yes --> Rewrite[Tool: rewrite_query lay terms]
+        Rewrite --> SearchInitial[Tool: search_corpus initial terms]
+        SearchInitial --> SearchStatutory[Tool: search_corpus / get_clause statutory rules]
+        SearchStatutory --> ReQuery[Tool: search_corpus iterative read terms]
+        ReQuery --> Draft[Draft Seriousness, Expectedness, Routing & Citations]
+    end
+
+    Assessor -.->|Assessor Crashes / Exception| StatusFailed([status: failed])
+    EscalateInj --> Verifier[Verifier Agent Node]
+    EscalateTox --> Verifier
+    EscalateDates --> Verifier
+    EscalateDrug --> Verifier
+    Draft --> Verifier
+
+    subgraph "Verifier Node Execution"
+        Verifier --> AuditPassages{All passage_ids retrieved?}
+        AuditPassages -- Yes --> AuditQuotes{All quotes exact verbatim?}
+        AuditQuotes -- Yes --> AuditClaims{Passages support claims?}
+        AuditPassages -- No --> RejectAudit[Verification Audit Failed]
+        AuditQuotes -- No --> RejectAudit
+        AuditClaims -- No --> RejectAudit
+        RejectAudit --> RetryCheck{Retry count < 2?}
+        RetryCheck -- Yes: attempt 1 or 2 --> LoopAssessor[Assessor Node: Alternative Search Strategy]
+        RetryCheck -- No: retries exhausted --> EscalateRetries[Mark Escalated: Retries Exhausted]
+        AuditClaims -- Yes --> VerifyComplete[Verification Passed: Completed]
+    end
+
+    LoopAssessor --> Assessor
+    Verifier -.->|Verifier Crashes / Exception| StatusEscalated([status: escalated])
+    VerifyComplete --> OutputGuardrails[Output Guardrails Node]
+
+    subgraph "Output Guardrails"
+        OutputGuardrails --> OutCheck{Regulatory Action Claim?}
+        OutCheck -- Block --> EscalateOut[Mark Escalated: Output Guardrail Blocked]
+        OutCheck -- Pass --> ToxOutCheck{Output Toxicity Check}
+        ToxOutCheck -- Block --> EscalateOutTox[Mark Escalated: Toxic Output]
+        ToxOutCheck -- Pass --> StatusCompleted([status: completed])
+    end
+
+    EscalateRetries --> StatusEscalated
+    EscalateOut --> StatusEscalated
+    EscalateOutTox --> StatusEscalated
+
+    StatusCompleted --> END([END])
+    StatusEscalated --> END
+    StatusFailed --> END
+```

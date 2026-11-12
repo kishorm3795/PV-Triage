@@ -1,17 +1,28 @@
-"""llm/client.py - Provider-agnostic LLM client abstraction.
+"""llm/client.py - Unified LLM Client abstraction.
 
-Supports 'stub' and 'gemini' providers selected strictly via the LLM_PROVIDER
-environment variable. No endpoints, keys, or models are hardcoded.
+Supports:
+1. 'stub' provider for fast, deterministic unit and offline testing.
+2. 'gemini' provider connecting to the real Google Gemini API via official REST endpoint.
+3. Resilience layer with timeout from env (no hardcoded default in code paths), bounded retry
+   with backoff and jitter, circuit breaker with state transitions, and Prometheus telemetry.
 """
 
 from __future__ import annotations
 
-import json
+import logging
 import os
 import time
-from typing import Any, Dict, Optional, Union
-from pydantic import BaseModel, Field
+from typing import Any, Dict, Optional
 import requests
+from pydantic import BaseModel
+
+from llm.resilience import (
+    CircuitBreaker,
+    get_circuit_breaker,
+    get_llm_timeout,
+)
+
+logger = logging.getLogger("llm.client")
 
 
 class LLMResponse(BaseModel):
@@ -22,6 +33,9 @@ class LLMResponse(BaseModel):
     completion_tokens: int = 0
     latency_ms: float = 0.0
     model: str = ""
+    attempt: int = 1
+    retries: int = 0
+    breaker_state: str = "closed"
 
     def __getitem__(self, item: str) -> Any:
         return getattr(self, item)
@@ -37,10 +51,11 @@ class LLMClient:
         self,
         provider: Optional[str] = None,
         timeout: Optional[float] = None,
+        circuit_breaker: Optional[CircuitBreaker] = None,
     ) -> None:
         self.provider = (provider or os.getenv("LLM_PROVIDER", "stub")).lower().strip()
-        default_timeout = float(os.getenv("LLM_TIMEOUT", os.getenv("RUN_TIMEOUT_S", "30.0")))
-        self.default_timeout = timeout if timeout is not None else default_timeout
+        self._timeout = timeout
+        self.circuit_breaker = circuit_breaker or get_circuit_breaker()
 
     def generate(
         self,
@@ -49,27 +64,39 @@ class LLMClient:
         timeout: Optional[float] = None,
         **kwargs: Any,
     ) -> LLMResponse:
-        """Generate a completion using the active LLM provider.
+        """Generate a completion using the active LLM provider protected by resilience layer.
 
         Args:
             prompt: User/task prompt text.
             system: Optional system instruction prompt.
-            timeout: Optional call timeout in seconds.
+            timeout: Optional call timeout in seconds (retrieved from env if None).
             **kwargs: Extra provider-specific parameters (e.g., temperature, max_tokens).
 
         Returns:
             LLMResponse containing text, prompt_tokens, completion_tokens, latency_ms, model.
         """
-        call_timeout = timeout if timeout is not None else self.default_timeout
+        # Task 4a: Timeout on every model call strictly from env, no hardcoded default in code paths
+        call_timeout = (
+            timeout
+            if timeout is not None
+            else (self._timeout if self._timeout is not None else get_llm_timeout())
+        )
 
-        if self.provider == "stub":
-            return self._generate_stub(prompt, system, call_timeout, **kwargs)
-        elif self.provider == "gemini":
-            return self._generate_gemini(prompt, system, call_timeout, **kwargs)
-        else:
-            raise ValueError(
-                f"Unsupported LLM_PROVIDER '{self.provider}'. Must be 'stub' or 'gemini'."
-            )
+        def _do_generate() -> LLMResponse:
+            if self.provider == "stub":
+                return self._generate_stub(prompt, system, call_timeout, **kwargs)
+            elif self.provider == "gemini":
+                return self._generate_gemini(prompt, system, call_timeout, **kwargs)
+            else:
+                raise ValueError(
+                    f"Unsupported LLM_PROVIDER '{self.provider}'. Must be 'stub' or 'gemini'."
+                )
+
+        response, audit = self.circuit_breaker.execute_with_resilience(_do_generate)
+        response.attempt = audit.get("attempt", 1)
+        response.retries = audit.get("retries", 0)
+        response.breaker_state = audit.get("breaker_state", "closed")
+        return response
 
     def _generate_stub(
         self,
@@ -79,6 +106,16 @@ class LLMClient:
         **kwargs: Any,
     ) -> LLMResponse:
         """Call the deterministic Stub LLM service over HTTP."""
+        stub_fail = os.getenv("STUB_FAIL", "false").lower() == "true"
+        if stub_fail:
+            resp = requests.Response()
+            resp.status_code = 500
+            resp._content = b'{"detail": "Simulated Stub LLM Failure (STUB_FAIL=true)"}'
+            raise requests.HTTPError(
+                "500 Server Error: Simulated Stub LLM Failure (STUB_FAIL=true)",
+                response=resp,
+            )
+
         base_url = os.getenv("LLM_BASE_URL", "http://stub-llm:8001").rstrip("/")
         endpoint = f"{base_url}/generate"
 
@@ -105,6 +142,14 @@ class LLMClient:
                     resp.raise_for_status()
                     data = resp.json()
                 except requests.RequestException:
+                    if stub_fail:
+                        resp = requests.Response()
+                        resp.status_code = 500
+                        resp._content = b'{"detail": "Simulated Stub LLM Failure (STUB_FAIL=true)"}'
+                        raise requests.HTTPError(
+                            "500 Server Error: Simulated Stub LLM Failure (STUB_FAIL=true)",
+                            response=resp,
+                        )
                     # Deterministic in-process fallback when container is offline
                     data = {
                         "text": (
@@ -120,19 +165,7 @@ class LLMClient:
                         "model": "stub-llm",
                     }
             else:
-                data = {
-                    "text": (
-                        "The patient experienced severe skin peeling and blistering 7 days after starting "
-                        "the suspect drug, resulting in inpatient hospitalization. Under NDCT Rules 2019 "
-                        "and IPC Pharmacovigilance Guidance for MAHs, inpatient hospitalization satisfies "
-                        "statutory seriousness criteria. The adverse reaction is not listed in the package "
-                        "insert, constituting a serious unexpected adverse reaction requiring expedited reporting."
-                    ),
-                    "prompt_tokens": 150,
-                    "completion_tokens": 62,
-                    "latency_ms": 10.0,
-                    "model": "stub-llm",
-                }
+                raise RuntimeError(f"Stub LLM request failed: {exc}") from exc
 
         elapsed_ms = (time.perf_counter() - start_time) * 1000.0
 
@@ -175,7 +208,12 @@ class LLMClient:
 
         start_time = time.perf_counter()
         try:
-            resp = requests.post(url, json=body, timeout=timeout)
+            resp = requests.post(
+                url,
+                json=body,
+                headers={"Content-Type": "application/json"},
+                timeout=timeout,
+            )
             resp.raise_for_status()
             data = resp.json()
         except requests.RequestException as exc:
@@ -183,21 +221,22 @@ class LLMClient:
 
         elapsed_ms = (time.perf_counter() - start_time) * 1000.0
 
-        text = ""
         candidates = data.get("candidates", [])
-        if candidates:
-            parts = candidates[0].get("content", {}).get("parts", [])
-            if parts:
-                text = parts[0].get("text", "")
+        if not candidates:
+            raise RuntimeError("Gemini API returned no candidates.")
+
+        first_cand = candidates[0]
+        content_parts = first_cand.get("content", {}).get("parts", [])
+        text = "".join([p.get("text", "") for p in content_parts])
 
         usage = data.get("usageMetadata", {})
         prompt_tokens = int(usage.get("promptTokenCount", 0))
-        completion_tokens = int(usage.get("candidatesTokenCount", 0))
+        comp_tokens = int(usage.get("candidatesTokenCount", 0))
 
         return LLMResponse(
             text=text,
             prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
+            completion_tokens=comp_tokens,
             latency_ms=elapsed_ms,
             model=model,
         )
