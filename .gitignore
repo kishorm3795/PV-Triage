@@ -24,6 +24,9 @@ data/chroma/
 *.log
 logs/
 
+# Batch output
+agents/out/
+
 # Node / frontend
 node_modules/
 
