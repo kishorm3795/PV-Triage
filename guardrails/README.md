@@ -70,3 +70,49 @@ Medical ADR reports routinely contain distressing or severe pathological termino
 2. **False Negatives**: Subtle or sophisticated harassment, passive-aggressive threats, contextual sarcasm, or novel slang will not be detected by offline regex heuristics.
 3. **Language Coverage**: Current heuristic rules cover **English-only** text. Reports submitted in Hindi, Spanish, or other languages will not be evaluated for toxicity by this offline module.
 4. **Obfuscation Gaps**: Heavy ciphering, spaced leetspeak (e.g., `f.u.c.k`), or base64 encodings not specifically matched by the normalization pipeline may bypass the regex filters.
+
+---
+
+## 5. Prompt Injection False-Positive Review (Phase 6)
+
+### Clinical Narratives Test Set
+**File:** `agents/tests/fixtures/clinical_narratives.jsonl` (15 synthetic clinical narratives)
+
+Contains legitimate medical documentation using words that appear in injection patterns:
+- `ignore` — patient quotes ("cannot ignore symptoms"), clinical advice ("do not ignore previous history")
+- `system` — medical terms ("systemic onset", "systemic review"), EHR workflows ("system prompted")
+- `disregard` — adherence documentation ("disregarded dosing advice", "disregarded contraindication")
+- `instructions` — package insert references ("instruction manual", "instruction adherence")
+- `act` — clinical action ("acted quickly", "act in patient's best interest", "act on early symptoms")
+- `override` — clinical decision making ("override standard dose")
+- `prompt` — clinical decision support ("system prompted")
+
+### Before/After Tuning Results
+
+| Metric | Before Tuning | After Tuning | Change |
+|--------|---------------|--------------|--------|
+| **Clinical narratives blocked (FP)** | 0 / 15 (0%) | 0 / 15 (0%) | **No change needed** |
+| **Real injections blocked (TP)** | 7 / 7 (100%) | 7 / 7 (100%) | **Preserved** |
+
+**Conclusion:** The existing heuristics in `guardrails/injection.py` are already well-calibrated:
+- Instruction override patterns require full phrases like `"ignore previous instructions"` or `"disregard all previous"` — not just standalone `ignore` or `disregard`
+- Role hijack patterns require structural markers like `"you are now"`, `"act as a"`, `"system:"` at line start
+- Tool smuggling patterns require JSON-like or function-call syntax
+
+No heuristic tuning was required. The false-positive review confirms the guardrail correctly distinguishes legitimate clinical language from adversarial injection attempts.
+
+### Test Execution
+```bash
+# Run false-positive review
+python3 -c "
+from guardrails.injection import check_input_injection
+import json
+with open('agents/tests/fixtures/clinical_narratives.jsonl') as f:
+    for line in f:
+        s = json.loads(line)
+        r = check_input_injection({'reaction_description': s['reaction_description'], 'narrative': s['narrative']}, s['report_id'])
+        print('BLOCKED' if not r.passed else 'OK', s['scenario_id'])
+"
+```
+
+All 15 clinical narratives pass (0 false positives). All 7 real injection samples from the test suite remain blocked (100% true positive rate).

@@ -2,7 +2,7 @@
 
 **Branch:** `b/agents`  
 **Owner:** Member B (Agent Core & LLMOps)  
-**Phase:** Phase 4 (Safety, Resilience and Observability)  
+**Phase:** Phase 4–6 (Safety, Resilience, Observability + Prompt Variants + Cost/Sampling/Guardrail Tuning)  
 **Last Updated:** 2026-11-12
 
 ---
@@ -35,6 +35,27 @@
 
 ---
 
+## Phase 5 Items (Complete)
+
+| Item | B-owned Implementation | C Dependency |
+| :--- | :--- | :--- |
+| **Prompt Version A/B** | `PROMPT_VERSION=v1|v2` env var in `prompts/loader.py` + graph node | None — uses same mock retriever |
+| **Deliberate Change Flag** | `MODIFYING_PROVISION_SEARCH=on|off` in `agents/graph.py` wraps Step 3 | None — mock retriever compatible |
+| **Failure Diagnosis Loop** | Ran batch on local fixtures; documented in `agents/CHANGES.md` | C's official eval set for 4-metric comparison |
+| **CHANGES.md** | Created with before/after comparison (stub LLM) | Placeholder for C's official results |
+
+---
+
+## Phase 6 Items (Complete — B-only, No C Dependencies)
+
+| Item | Implementation | Files |
+| :--- | :--- | :--- |
+| **Cost Report** | `agents/COST.md` — cost per 100 runs from batch trace tokens, formula, prices from env, per-agent/tool breakdown, largest cost driver identified (Assessor = 68%), stub LLM disclaimer | `agents/COST.md` |
+| **Live Sampling** | `agents/sampling.py` — background job sampling ~10% of completed runs (SAMPLE_RATE), dual RunSource adapters (TraceStoreRunSource + BatchOutputRunSource fallback), SQLite storage (SAMPLE_DB), CLI for table/CSV export | `agents/sampling.py`, `agents/out/sampling.db` |
+| **Guardrail FP Review** | `agents/tests/fixtures/clinical_narratives.jsonl` (15 clinical narratives), measured 0% false positive rate, 100% true positive preserved, documented in `guardrails/README.md` | `agents/tests/fixtures/clinical_narratives.jsonl`, `guardrails/README.md` |
+
+---
+
 ## Phase 5+ Anticipated Dependencies
 
 | Item | Anticipated B-owned Fallback | Needed from C |
@@ -42,3 +63,4 @@
 | **Real Retrieval for Batch Eval** | `RETRIEVER=mock` continues to work; local fixtures provide deterministic results. | C's real index for official eval runs. |
 | **Official Scorer Metrics** | `SCORER=local` provides citation resolve + claim support. | C's LLM-judge scorers for groundedness, regulatory compliance. |
 | **Prompt Version Comparison** | `agents/batch.py --prompt-version v1|v2` works with local fixtures. | C's eval set for official 4-metric comparison. |
+| **Trace Store Adapter** | `BatchOutputRunSource` reads `agents/out/*.json` (fallback). | Member A's trace store HTTP endpoint (`TRACE_STORE_URL`). |
