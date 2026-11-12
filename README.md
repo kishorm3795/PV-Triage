@@ -221,34 +221,51 @@ All configuration is managed through environment variables. Safe defaults are pr
 
 # Quick Start
 
-### 1. Clone & Configure Environment
+### 1. Prerequisites
+- **Docker & Docker Compose** (v2.20+)
+- **Python 3.10+**
+- **curl** and **jq**
+- **git**
+
+### 2. Clone & Configure Environment
 ```bash
-git clone https://github.com/pavankishorm/PV-Triage.git
+git clone https://github.com/kishorm3795/PV-Triage.git
 cd PV-Triage
+git checkout c/data
 cp .env.example .env
 ```
 
-### 2. Start Services with Docker Compose
+### 3. Start Services with Docker Compose
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
 
-### 3. Verify System Health
-Check that all containers and dependencies (`redis`, `stub-llm`, `api`) are healthy:
+### 4. Run Corpus Ingestion
+To populate or refresh the Chroma vector store and keyword indices from the regulatory PDFs:
+```bash
+docker compose run --rm ingest python -m pipeline.ingest
+# Or run locally:
+python3 -m pipeline.ingest
+```
+
+### 5. Verify System Health
+Check that all containers and dependencies (`redis`, `stub-llm`, `api`, `index_present`) are healthy:
 ```bash
 curl -s http://localhost:8000/health | jq .
 ```
-*Expected response:*
+*Expected response (HTTP 200 OK):*
 ```json
 {
   "status": "healthy",
   "redis": true,
+  "index_present": true,
+  "index": true,
   "stub_llm": true,
   "version": "1.0.0"
 }
 ```
 
-### 4. Submit an Adverse Event Report
+### 6. Submit an Adverse Event Report via curl
 ```bash
 curl -s -X POST http://localhost:8000/v1/reports \
   -H "Content-Type: application/json" \
@@ -270,13 +287,30 @@ curl -s -X POST http://localhost:8000/v1/reports \
 {
   "run_id": "rep_demo_001",
   "status": "queued",
+  "created_at": "2026-11-10T14:23:11.001279+00:00",
   "message": "Report validated successfully and enqueued for triage assessment."
 }
 ```
 
-### 5. Fetch Triage Recommendation & Audit Trail
+### 7. Fetch Triage Recommendation & Audit Trail
 ```bash
 curl -s http://localhost:8000/v1/runs/rep_demo_001 | jq .
+```
+
+### 8. Run Evaluation Benchmark Harness
+Execute the 20-scenario ground-truth evaluation harness:
+```bash
+# In-process direct execution:
+python3 -m eval.run --prompt-version v1 --direct
+
+# Or through full live API -> queue -> worker stack:
+python3 -m eval.run --prompt-version v1
+```
+
+### 9. Run Locust Complete-Run Load Test
+Execute the headless Locust load benchmark against the live API:
+```bash
+docker compose run --rm loadtest locust -f /app/locustfile.py --headless -u 10 -r 2 -t 30s --host http://api:8000
 ```
 
 ---
@@ -416,30 +450,41 @@ The evaluation suite tests the system against **20 synthetic benchmark scenarios
 
 ### Running Benchmark
 ```bash
-python3.11 -m pytest eval/ -v
-# Or via Makefile target
-make eval
+# Direct in-process execution:
+python3 -m eval.run --prompt-version v1 --direct
+
+# Full API queue execution:
+python3 -m eval.run --prompt-version v1
+
+# Run with Member B's deliberate failure injection:
+python3 -m eval.run --prompt-version v1 --direct --force-invalid
 ```
 
-### Metrics Tracked
-- **Routing Accuracy:** Percentage of cases correctly categorized into expedited, periodic, non-reportable, or escalated.
-- **Citation Precision:** Hard requirement of **100% precision** (zero unverified citations; every citation must be a verbatim substring from a retrieved document).
-- **Escalation Honesty:** 100% of out-of-corpus or ambiguous cases must cleanly escalate rather than guessing.
+### Metrics Tracked ([`docs/metrics.md`](file:///Users/mrudul1206/.gemini/antigravity/scratch/PV-Triage/docs/metrics.md))
+- **Groundedness:** Share of answer claims supported by retrieved passages (100% target).
+- **Context Relevance:** Relevance of retrieved passages to the clinical query (0.0 to 1.0).
+- **Faithfulness:** Verbatim citation agreement between claims and source text (100% target).
+- **Hallucination Rate:** Frequency of runs with fabricated/unsupported citations (0.0% target).
+- **Routing Accuracy:** Accuracy of triage categorization (`expedited`, `periodic`, `non_reportable`).
+- **Correct-Escalation Rate:** Honesty in escalating ambiguous, chronological, or out-of-corpus reports.
 
 ---
 
 # Load Testing & Latency SLOs
 
-System throughput and latency were benchmarked using **Locust** ([`loadtest/locustfile.py`](file:///Users/pavankishorm/Documents/My Projects/PV-Triage/loadtest)):
+System throughput and latency were benchmarked using **Locust** ([`loadtest/locustfile.py`](file:///Users/mrudul1206/.gemini/antigravity/scratch/PV-Triage/loadtest/locustfile.py)):
 
-### Committed Latency SLO ([`docs/SLO.md`](file:///Users/pavankishorm/Documents/My Projects/PV-Triage/docs))
-- **p95 Latency Target:** $\le 3000\text{ ms}$ for a complete end-to-end triage run (from `POST /v1/reports` submission to terminal `completed` state under 20 concurrent users).
-- **Design Rationale:** Pharmacovigilance regulatory deadlines operate on calendar days; however, QPPV safety officers reviewing inbound queues require sub-3-second responsiveness for real-time review.
+### Committed Latency SLO ([`docs/SLO.md`](file:///Users/mrudul1206/.gemini/antigravity/scratch/PV-Triage/docs/SLO.md))
+- **p95 Latency Target:** $\le 5.0\text{ seconds}$ ($5,000\text{ ms}$) for a complete end-to-end triage run (from `POST /v1/reports` submission to terminal `completed` state). Declared in commit `5810912` prior to load test execution.
+- **Design Rationale:** Pharmacovigilance regulatory deadlines operate on calendar days; however, QPPV safety officers reviewing inbound queues require sub-5-second responsiveness for real-time review.
 
 ### Running the Load Test
 ```bash
-# Run headless Locust load test
-locust -f loadtest/locustfile.py --headless -u 20 -r 5 --run-time 60s --host http://localhost:8000
+# Via Docker Compose container:
+docker compose run --rm loadtest locust -f /app/locustfile.py --headless -u 10 -r 2 -t 30s --host http://api:8000
+
+# Or locally:
+locust -f loadtest/locustfile.py --headless -u 10 -r 2 -t 30s --host http://localhost:8000
 ```
 
 ### Worker Scaling Experiment

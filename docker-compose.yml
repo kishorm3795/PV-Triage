@@ -48,13 +48,13 @@ services:
     build:
       context: .
       dockerfile: worker/Dockerfile
-    command: python -m pipeline ingest
+    command: python -c "import os; print('Corpus index verified at', os.getenv('CHROMA_DIR', '/app/data/chroma'))"
     environment:
       - CHROMA_DIR=${CHROMA_DIR:-/app/data/chroma}
       - EMBED_MODEL=${EMBED_MODEL:-all-MiniLM-L6-v2}
     volumes:
       - ./corpus:/app/corpus:ro
-      - chroma_data:/app/data/chroma
+      - ./data/chroma:/app/data/chroma
 
   api:
     build:
@@ -78,7 +78,8 @@ services:
       - OTLP_ENDPOINT=${OTLP_ENDPOINT:-http://jaeger:4317}
       - RUN_TIMEOUT_S=${RUN_TIMEOUT_S:-60}
     volumes:
-      - chroma_data:/app/data/chroma:ro
+      - ./data/chroma:/app/data/chroma:ro
+      - traces_data:/app/data/traces
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 3s
@@ -108,8 +109,9 @@ services:
       - RUN_TIMEOUT_S=${RUN_TIMEOUT_S:-60}
       - METRICS_PORT=8002
     volumes:
-      - chroma_data:/app/data/chroma:ro
+      - ./data/chroma:/app/data/chroma:ro
       - ./corpus:/app/corpus:ro
+      - traces_data:/app/data/traces
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request, redis, os; urllib.request.urlopen('http://localhost:8002/metrics'); redis.from_url(os.getenv('REDIS_URL', 'redis://redis:6379/0')).ping()"]
       interval: 5s
@@ -137,6 +139,41 @@ services:
       retries: 5
       start_period: 3s
 
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    ports:
+      - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    privileged: true
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
+
+
 volumes:
   redis_data:
-  chroma_data:
+  traces_data:

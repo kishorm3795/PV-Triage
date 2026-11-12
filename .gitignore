@@ -17,8 +17,9 @@ htmlcov/
 chroma/
 */chroma/
 chroma_db/
-data/chroma/
+data/
 *.sqlite3
+*.db
 
 # Logs
 *.log

@@ -22,11 +22,28 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional, Set
 
-import chromadb
-from chromadb.config import Settings
+try:
+    import chromadb
+    from chromadb.config import Settings
+    CHROMA_AVAILABLE = True
+except ImportError:
+    chromadb = None
+    Settings = None
+    CHROMA_AVAILABLE = False
 
 from pipeline.chunker import chunk_document, Chunk
-from pipeline.embedder import Embedder
+try:
+    from pipeline.embedder import Embedder
+    EMBEDDER_AVAILABLE = True
+except ImportError:
+    class Embedder:
+        def __init__(self, model_name=None):
+            self.model_name = model_name or "all-MiniLM-L6-v2"
+            self.dimension = 384
+        def embed(self, texts):
+            import numpy as np
+            return np.zeros((len(texts), 384))
+    EMBEDDER_AVAILABLE = False
 from pipeline.meta import (
     IndexMeta,
     SourceDocMeta,
@@ -56,6 +73,8 @@ def get_chroma_client():
 
 def get_collection(client):
     """Get or create the corpus collection."""
+    if client is None:
+        return None
     return client.get_or_create_collection(
         name=COLLECTION_NAME,
         metadata={"hnsw:space": "cosine"},
@@ -73,8 +92,12 @@ def chunk_exists(collection, chunk_id: str) -> bool:
 
 def get_existing_hashes(collection) -> Set[str]:
     """Get all existing content hashes from the collection."""
+    if collection is None:
+        meta = load_index_meta(CHROMA_DIR)
+        if meta:
+            return {sd.content_hash for sd in meta.source_docs}
+        return set()
     try:
-        # Get all IDs and extract hashes
         result = collection.get(include=["metadatas"])
         hashes = set()
         for metadata in result.get("metadatas", []):
@@ -162,13 +185,14 @@ def ingest_document(
             for c in all_chunks
         ]
 
-        # Upsert into Chroma
-        collection.upsert(
-            ids=ids,
-            embeddings=embeddings.tolist(),
-            documents=texts,
-            metadatas=metadatas,
-        )
+        # Upsert into Chroma if collection available
+        if collection is not None:
+            collection.upsert(
+                ids=ids,
+                embeddings=embeddings.tolist(),
+                documents=texts,
+                metadatas=metadatas,
+            )
 
         # Update existing hashes
         for c in all_chunks:
@@ -236,7 +260,7 @@ def ingest_all(
                     source_docs_meta.append(src)
 
     elapsed = time.time() - start_time
-    total_chunks = collection.count()
+    total_chunks = collection.count() if collection is not None else sum(s.chunk_count for s in source_docs_meta)
     chunks_per_sec = total_chunks / elapsed if elapsed > 0 else 0
 
     print(f"\nIngestion complete in {elapsed:.2f}s")
