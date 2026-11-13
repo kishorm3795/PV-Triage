@@ -134,14 +134,17 @@ def run_batch(
         # Citation resolve rate (from score)
         citations_resolved = score.get("citation_resolve", False)
 
-        # Verifier outcome (infer from trace)
+        # Verifier outcome - use RunResult.verification_passed if available, else infer from trace
         verifier_outcome = "skipped"
-        for ts in result.trace:
-            if ts.agent == "verifier" and isinstance(ts.detail, dict):
-                verification = ts.detail.get("verification")
-                if verification is not None:
-                    verifier_outcome = "passed" if verification.get("ok") else "failed"
-                    break
+        if result.verification_passed is not None:
+            verifier_outcome = "passed" if result.verification_passed else "failed"
+        else:
+            for ts in result.trace:
+                if ts.agent == "verifier" and isinstance(ts.detail, dict):
+                    verification = ts.detail.get("verification")
+                    if verification is not None:
+                        verifier_outcome = "passed" if verification.get("ok") else "failed"
+                        break
 
         result_dict = {
             "run_id": run_id,
