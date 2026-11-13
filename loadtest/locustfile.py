@@ -72,9 +72,7 @@ class PharmacovigilanceUser(HttpUser):
         report_template = SAMPLE_REPORTS[int(time.time() * 1000) % len(SAMPLE_REPORTS)].copy()
         # Phase 6 repeat request mix: repeat identical report content vs unique case
         if random.random() >= REPEAT_RATIO:
-            report_template["reaction_description"] = (
-                f"{report_template['reaction_description']} [case {uuid.uuid4().hex[:6]}]"
-            )
+            report_template["reaction_description"] = f"{report_template['reaction_description']} [case {uuid.uuid4().hex[:6]}]"
 
         report_id = f"rep_load_{uuid.uuid4().hex[:12]}"
         client_id = f"client_{uuid.uuid4().hex[:4]}"
@@ -145,7 +143,9 @@ class PharmacovigilanceUser(HttpUser):
                 catch_response=True,
             ) as poll_resp:
                 if poll_resp.status_code != 200:
-                    poll_resp.failure(f"Poll error HTTP {poll_resp.status_code} for run {run_id}")
+                    poll_resp.failure(
+                        f"Poll error HTTP {poll_resp.status_code} for run {run_id}"
+                    )
                     continue
 
                 try:

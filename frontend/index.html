@@ -1,0 +1,1349 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PV Triage — Autonomous Pharmacovigilance & Statutory Decision Support</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Ambient Glow Background Effects -->
+  <div class="ambient-glow ambient-glow-1" aria-hidden="true"></div>
+  <div class="ambient-glow ambient-glow-2" aria-hidden="true"></div>
+
+  <!-- Interactive Login & Role Portal Overlay -->
+  <div id="loginOverlay" class="login-portal-backdrop" role="dialog" aria-modal="true" aria-labelledby="loginPortalTitle">
+    <div class="login-portal-card glass-panel">
+      
+      <!-- Brand & Regulatory Header -->
+      <div class="login-brand-header">
+        <div class="brand-logo-wrapper">
+          <div class="logo-pulse-glow" aria-hidden="true"></div>
+          <svg class="brand-logo" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <rect width="36" height="36" rx="10" fill="url(#brandGradLogin)"/>
+            <path d="M18 7V29M7 18H29" stroke="#FFFFFF" stroke-width="2.8" stroke-linecap="round"/>
+            <path d="M11 18L15 18L17 12L19 24L21 18L25 18" stroke="#2DD4BF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            <defs>
+              <linearGradient id="brandGradLogin" x1="0" y1="0" x2="36" y2="36" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#0F2744"/>
+                <stop offset="1" stop-color="#0B132B"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <div class="login-brand-text">
+          <div class="brand-title-row">
+            <h1 id="loginPortalTitle" class="brand-title">PV Triage</h1>
+            <span class="brand-tag">Autonomous CDS</span>
+          </div>
+          <span class="brand-badge-regulatory">CDSCO / IPC / ICH E2A</span>
+          <p class="login-subtitle">Clinical Decision Support for Pharmacovigilance Safety Officers</p>
+        </div>
+      </div>
+
+      <!-- System operational heartbeat -->
+      <div class="login-system-status">
+        <span class="health-dot" aria-hidden="true"></span>
+        <span>Secure Clinical Authentication Gateway &bull; STUB LLM v1 Active</span>
+      </div>
+
+      <!-- Quick Role Selection Portal -->
+      <div class="login-selection-prompt">Sign in to access Clinical Safety Records:</div>
+      
+      <div class="login-role-grid">
+        <button type="button" class="login-role-card role-card-admin" id="btnLoginAsAdmin">
+          <div class="role-card-badge">Full Clinical Authority</div>
+          <div class="role-card-icon-wrap">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+              <polyline points="16 11 18 13 22 9"></polyline>
+            </svg>
+          </div>
+          <div class="role-card-title">Dr. Admin (QPPV)</div>
+          <div class="role-card-desc">Full Authorization: Update patient condition, upload clinical reports, author medical guidance &amp; run statutory triage.</div>
+          <div class="role-card-btn-fake">
+            <span>Sign In as Doctor</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </div>
+        </button>
+
+        <button type="button" class="login-role-card role-card-reception" id="btnLoginAsReception">
+          <div class="role-card-badge role-badge-blue">Clinical Desk</div>
+          <div class="role-card-icon-wrap icon-blue">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+              <line x1="7" y1="8" x2="17" y2="8"></line>
+              <line x1="7" y1="12" x2="17" y2="12"></line>
+              <line x1="7" y1="16" x2="13" y2="16"></line>
+            </svg>
+          </div>
+          <div class="role-card-title">Reception Desk</div>
+          <div class="role-card-desc">Read-Only Access: Review active patient roster, verify patient clinical status &amp; follow doctor's prescription directives.</div>
+          <div class="role-card-btn-fake">
+            <span>Sign In as Reception</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </div>
+        </button>
+      </div>
+
+      <!-- Credential Form Dropdown (Optional alternative) -->
+      <details class="login-credentials-accordion">
+        <summary class="credentials-summary">Or sign in with username &amp; password</summary>
+        <form id="formManualLogin" class="login-form-inner" onsubmit="return false;">
+          <div class="form-group">
+            <label for="loginUsername">Clinical ID / Username</label>
+            <input type="text" id="loginUsername" class="form-control" placeholder="e.g. dr.admin or reception" value="dr.admin">
+          </div>
+          <div class="form-group">
+            <label for="loginPassword">Access Key / Password</label>
+            <input type="password" id="loginPassword" class="form-control" placeholder="••••••••" value="clinical123">
+          </div>
+          <button type="submit" id="btnManualLoginSubmit" class="btn-action-primary" style="width: 100%; justify-content: center; padding: 10px;">
+            <span>Authorize &amp; Enter Cockpit</span>
+          </button>
+        </form>
+      </details>
+
+      <div class="login-portal-footer">
+        <span>IPC Pharmacovigilance Guidance for MAHs 2019 &bull; NDCT Rules 2019 Second Schedule</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top Enterprise Command Bar -->
+  <header class="top-bar">
+    <div class="top-bar-container">
+      <div class="brand-section">
+        <div class="brand-logo-wrapper">
+          <div class="logo-pulse-glow" aria-hidden="true"></div>
+          <svg class="brand-logo" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <rect width="36" height="36" rx="10" fill="url(#brandGrad)"/>
+            <path d="M18 7V29M7 18H29" stroke="#FFFFFF" stroke-width="2.8" stroke-linecap="round"/>
+            <path d="M11 18L15 18L17 12L19 24L21 18L25 18" stroke="#2DD4BF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            <defs>
+              <linearGradient id="brandGrad" x1="0" y1="0" x2="36" y2="36" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#0F2744"/>
+                <stop offset="1" stop-color="#0B132B"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <div class="brand-text-block">
+          <div class="brand-title-row">
+            <h1 class="brand-title">PV Triage</h1>
+            <span class="brand-tag">Autonomous CDS</span>
+            <span class="brand-badge-regulatory">CDSCO / IPC / ICH E2A</span>
+          </div>
+          <p class="brand-subtitle">Clinical Decision Support for Pharmacovigilance Safety Officers</p>
+        </div>
+      </div>
+
+      <div class="system-status-section">
+        <!-- Live Service Health Heartbeat -->
+        <div id="healthBadge" class="health-badge" role="status" aria-label="System status">
+          <span class="health-dot" aria-hidden="true"></span>
+          <span id="healthText">Service operational</span>
+        </div>
+
+        <span class="env-chip" id="envChip">STUB LLM | v1</span>
+
+        <!-- Observability Portal Links -->
+        <div class="observability-links" aria-label="Observability tools">
+          <a href="/docs" target="_blank" rel="noopener" class="nav-tool-btn" title="OpenAPI Schema &amp; Swagger Docs">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+            </svg>
+            <span>API Docs</span>
+          </a>
+          <a href="http://localhost:3000" target="_blank" rel="noopener" class="nav-tool-btn" title="Grafana Prometheus Dashboards">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <rect x="3" y="3" width="7" height="9" rx="1"></rect>
+              <rect x="14" y="3" width="7" height="5" rx="1"></rect>
+              <rect x="14" y="12" width="7" height="9" rx="1"></rect>
+              <rect x="3" y="16" width="7" height="5" rx="1"></rect>
+            </svg>
+            <span>Grafana</span>
+          </a>
+          <a href="http://localhost:16686" target="_blank" rel="noopener" class="nav-tool-btn" title="Jaeger Distributed Telemetry Traces">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+            </svg>
+            <span>Jaeger</span>
+          </a>
+        </div>
+
+        <!-- Role-Based Authorization Switcher -->
+        <div class="role-selector-pill" role="radiogroup" aria-label="Operating Role">
+          <span class="role-label-text">ROLE:</span>
+          <button type="button" id="roleBtnAdmin" class="role-pill-btn active" data-role="admin" title="Doctor / Qualified Safety Officer (Full Edit &amp; File Upload Authorization)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+              <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+            <span>Dr. Admin</span>
+          </button>
+          <button type="button" id="roleBtnReception" class="role-pill-btn" data-role="reception" title="Reception Desk (Read-Only Records &amp; Dr. Guidance)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+              <line x1="7" y1="8" x2="17" y2="8"></line>
+              <line x1="7" y1="12" x2="17" y2="12"></line>
+              <line x1="7" y1="16" x2="13" y2="16"></line>
+            </svg>
+            <span>Reception</span>
+          </button>
+        </div>
+
+        <!-- Light / Dark Theme Switcher -->
+        <button type="button" id="themeToggleBtn" class="theme-toggle-btn" aria-label="Toggle theme mode" title="Switch between Dark and Light mode">
+          <svg class="sun-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+          <svg class="moon-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
+        </button>
+
+        <!-- User Profile & Sign Out -->
+        <div id="userProfileChip" class="user-profile-chip" title="Current session">
+          <div class="user-avatar-sm" aria-hidden="true">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+          </div>
+          <span id="userProfileName" class="user-profile-name">Dr. Admin (QPPV)</span>
+          <button type="button" id="btnSignOut" class="btn-signout-mini" title="Sign out to clinical login portal">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+              <polyline points="16 17 21 12 16 7"></polyline>
+              <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+            <span>Sign Out</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation Header Bar with View Tabs -->
+  <nav class="main-nav-bar" aria-label="Primary Navigation">
+    <div class="main-nav-container">
+      <div class="nav-tabs-wrapper">
+        <button type="button" id="tabBtnPatients" class="nav-tab-btn active">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+            <circle cx="9" cy="7" r="4"></circle>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+          </svg>
+          <span>Patient Safety Dashboard</span>
+          <span class="nav-tab-count" id="patientCountBadge">4</span>
+        </button>
+        <button type="button" id="tabBtnTriage" class="nav-tab-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+          <span>AI Clinical Triage Cockpit</span>
+        </button>
+      </div>
+      <div class="nav-right-actions">
+        <span id="roleNoticeBadge" class="role-notice-badge role-admin-badge">
+          <span class="role-pulse-dot" aria-hidden="true"></span>
+          <span id="roleNoticeText">Doctor (Admin) Mode — Full Clinical Control &amp; Guidance Authorization</span>
+        </span>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Container -->
+  <main class="app-container">
+
+    <!-- VIEW 1: PATIENT SAFETY REGISTRY DASHBOARD -->
+    <div id="viewPatients" class="patient-dashboard-container">
+
+      <!-- Executive KPI Metrics Row -->
+      <div class="patient-kpi-grid">
+        <div class="patient-kpi-card">
+          <div class="kpi-header-row">
+            <span class="kpi-title">Monitored Cohort</span>
+            <div class="kpi-icon-wrap">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-body-row">
+            <div id="kpiTotalPatients" class="kpi-num">4</div>
+            <div class="kpi-sparkline-wrap">
+              <svg class="kpi-sparkline" viewBox="0 0 80 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M0 16 Q20 6 40 14 T80 8" stroke="#2DD4BF" stroke-width="2" stroke-linecap="round" fill="none"/>
+                <circle cx="80" cy="8" r="2.5" fill="#2DD4BF"/>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-footer-row">
+            <span class="kpi-badge kpi-badge-teal">Active PV Cohort</span>
+            <span class="kpi-subtitle">Realtime telemetry</span>
+          </div>
+        </div>
+
+        <div class="patient-kpi-card">
+          <div class="kpi-header-row">
+            <span class="kpi-title">Expedited SAEs (15-Day)</span>
+            <div class="kpi-icon-wrap" style="color: #FB923C;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-body-row">
+            <div id="kpiSevereSAEs" class="kpi-num" style="color: #FB923C;">1</div>
+            <div class="kpi-sparkline-wrap">
+              <svg class="kpi-sparkline" viewBox="0 0 80 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M0 18 Q20 22 40 10 T80 4" stroke="#FB923C" stroke-width="2" stroke-linecap="round" fill="none"/>
+                <circle cx="80" cy="4" r="2.5" fill="#FB923C"/>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-footer-row">
+            <span class="kpi-badge kpi-badge-orange">Statutory Filing Active</span>
+            <span class="kpi-subtitle">CDSCO Rule 2019</span>
+          </div>
+        </div>
+
+        <div class="patient-kpi-card">
+          <div class="kpi-header-row">
+            <span class="kpi-title">Inpatient / Critical Care</span>
+            <div class="kpi-icon-wrap" style="color: #F87171;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-body-row">
+            <div id="kpiHospitalised" class="kpi-num" style="color: #F87171;">2</div>
+            <div class="kpi-sparkline-wrap">
+              <svg class="kpi-sparkline" viewBox="0 0 80 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M0 12 L20 12 L28 4 L36 20 L44 8 L52 12 L80 12" stroke="#F87171" stroke-width="2" stroke-linecap="round" fill="none"/>
+                <circle cx="80" cy="12" r="2.5" fill="#F87171"/>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-footer-row">
+            <span class="kpi-badge kpi-badge-red">ICU / Inpatient</span>
+            <span class="kpi-subtitle">Barrier care required</span>
+          </div>
+        </div>
+
+        <div class="patient-kpi-card">
+          <div class="kpi-header-row">
+            <span class="kpi-title">Recovering / Resolved</span>
+            <div class="kpi-icon-wrap" style="color: #4ADE80;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-body-row">
+            <div id="kpiRecovered" class="kpi-num" style="color: #4ADE80;">1</div>
+            <div class="kpi-sparkline-wrap">
+              <svg class="kpi-sparkline" viewBox="0 0 80 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M0 20 Q25 18 50 10 T80 4" stroke="#4ADE80" stroke-width="2" stroke-linecap="round" fill="none"/>
+                <circle cx="80" cy="4" r="2.5" fill="#4ADE80"/>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-footer-row">
+            <span class="kpi-badge kpi-badge-green">Favorable Trend</span>
+            <span class="kpi-subtitle">Ambulatory discharge</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Registry Table Card -->
+      <div class="registry-card">
+        <div class="registry-card-header">
+          <div class="header-title-cluster">
+            <div class="header-icon-hex hex-teal">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+              </svg>
+            </div>
+            <div>
+              <h2 class="section-title">Clinical Patient Safety Registry &amp; Guidance Log</h2>
+              <p class="section-subtitle">Real-time Patient Condition Tracking &bull; Doctor Directives for Clinic Reception</p>
+            </div>
+          </div>
+
+          <div class="toolbar-actions">
+            <button type="button" id="btnOpenFileUpload" class="btn-action-secondary admin-only-feature" title="Doctor upload: Add adverse event PDF, clinical notes or lab findings">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+              <span>Upload Medical Report</span>
+            </button>
+            <button type="button" id="btnOpenNewPatient" class="btn-action-primary admin-only-feature" title="Doctor: Intake a new patient adverse event case">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              <span>Intake Patient Case</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Reception Read-Only Notice -->
+        <div id="receptionBannerNotice" class="reception-banner-notice" style="display: none;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="16" x2="12" y2="12"></line>
+            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+          </svg>
+          <div>
+            <strong>Reception Desk View:</strong> You have authorized read-only access to view patient records, condition status, and clinical guidance issued by Dr. Admin. Direct any clinical adjustments to the attending physician.
+          </div>
+        </div>
+
+        <!-- Registry Search & Filter Toolbar -->
+        <div class="registry-toolbar">
+          <div class="search-filter-cluster">
+            <div class="search-input-wrapper">
+              <svg class="search-icon-svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <input type="text" id="searchPatientInput" class="table-search-input" placeholder="Search patient name, MRN, medication, or reaction...">
+            </div>
+
+            <select id="filterConditionSelect" class="condition-filter-select" aria-label="Filter by patient clinical condition">
+              <option value="all">All Conditions</option>
+              <option value="Hospitalised (ICU)">Hospitalised (ICU)</option>
+              <option value="Hospitalised (Ward)">Hospitalised (Ward)</option>
+              <option value="Under Observation">Under Observation</option>
+              <option value="Recovering">Recovering</option>
+              <option value="Resolved / Discharged">Resolved / Discharged</option>
+            </select>
+          </div>
+
+          <div class="view-switch-cluster">
+            <div class="view-switch-group" role="group" aria-label="Registry View Mode">
+              <button type="button" id="btnViewCards" class="view-switch-btn active" title="Telemetry Pods Grid View">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+                  <rect x="3" y="3" width="7" height="7"></rect>
+                  <rect x="14" y="3" width="7" height="7"></rect>
+                  <rect x="14" y="14" width="7" height="7"></rect>
+                  <rect x="3" y="14" width="7" height="7"></rect>
+                </svg>
+                <span>Telemetry Pods</span>
+              </button>
+              <button type="button" id="btnViewTable" class="view-switch-btn" title="High-Density Clinical Table View">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+                  <line x1="8" y1="6" x2="21" y2="6"></line>
+                  <line x1="8" y1="12" x2="21" y2="12"></line>
+                  <line x1="8" y1="18" x2="21" y2="18"></line>
+                  <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                  <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                  <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                </svg>
+                <span>Clinical Table</span>
+              </button>
+            </div>
+
+            <div class="registry-meta-text">
+              Showing <strong id="visiblePatientCount">4</strong> cases
+            </div>
+          </div>
+        </div>
+
+        <!-- Telemetry Holographic Cards Grid (Default View) -->
+        <div id="patientCardsGrid" class="patient-cards-grid">
+          <!-- Dynamically populated by app.js -->
+        </div>
+
+        <!-- Patients Roster Table (Secondary High-Density View) -->
+        <div id="patientTableWrapper" class="patient-table-wrapper" style="display: none;">
+          <table class="patient-table">
+            <thead>
+              <tr>
+                <th>Patient / MRN</th>
+                <th>Suspect Drug</th>
+                <th>Adverse Reaction</th>
+                <th>Clinical Condition</th>
+                <th>Statutory Triage</th>
+                <th>Dr. Guidance (For Reception &amp; Staff)</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="patientTableBody">
+              <!-- Dynamically populated by app.js -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW 2: AI CLINICAL TRIAGE COCKPIT -->
+    <div id="viewTriage" class="triage-view-container" style="display: none;">
+
+      <!-- Interactive Case Simulator Bar -->
+      <section class="simulator-bar" aria-label="Regulatory benchmark cases">
+        <div class="simulator-bar-container">
+          <div class="simulator-heading">
+            <div class="sim-pulse-dot" aria-hidden="true"></div>
+            <span>Benchmark Scenarios:</span>
+          </div>
+          <div class="simulator-cards">
+            <button type="button" id="btnLoadRefCase" class="sim-card active-sim" title="Reference Case: Lamotrigine Stevens-Johnson Syndrome (Severe SAE -> Expedited 15-day)">
+              <span class="sim-pill pill-expedited">Expedited 15-day</span>
+              <div class="sim-meta">
+                <span class="sim-title">Lamotrigine SJS / TEN</span>
+                <span class="sim-desc">Hospitalisation &bull; Unlisted Reaction</span>
+              </div>
+            </button>
+
+            <button type="button" id="btnScenarioPeriodic" class="sim-card" title="Scenario 2: Lamotrigine Mild Skin Rash (Non-serious -> Periodic PSUR)">
+              <span class="sim-pill pill-periodic">Periodic PSUR</span>
+              <div class="sim-meta">
+                <span class="sim-title">Mild Cutaneous Rash</span>
+                <span class="sim-desc">Non-serious &bull; Routine Monitoring</span>
+              </div>
+            </button>
+
+            <button type="button" id="btnScenarioEscalated" class="sim-card" title="Scenario 3: Investigational Compound Not in Corpus -> Safety Officer Escalation">
+              <span class="sim-pill pill-escalated">Safety Officer</span>
+              <div class="sim-meta">
+                <span class="sim-title">ExperimentalCompound-X</span>
+                <span class="sim-desc">Unregistered Drug &bull; Escalated</span>
+              </div>
+            </button>
+
+            <button type="button" id="btnResetForm" class="sim-card sim-card-clear" title="Clear form to blank">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+              <span>Clear form</span>
+            </button>
+          </div>
+        </div>
+      </section>
+    <div class="main-layout">
+
+      <!-- LEFT COLUMN: Clinical Intake Console -->
+      <section class="glass-card intake-card" aria-labelledby="formTitle">
+        <div class="glass-card-header">
+          <div class="header-title-cluster">
+            <div class="header-icon-hex">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+              </svg>
+            </div>
+            <div>
+              <h2 id="formTitle" class="section-title">Adverse Event Intake</h2>
+              <p class="section-subtitle">CDSCO Individual Case Safety Report (ICSR)</p>
+            </div>
+          </div>
+          <button type="button" id="btnCardLoadRef" class="btn-micro-pill" title="Load synthetic reference scenario">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+            </svg>
+            Fill Ref Case
+          </button>
+        </div>
+
+        <!-- Global Alert for Validation / Server Errors -->
+        <div id="formAlertBanner" class="alert-banner alert-danger" role="alert">
+          <svg class="alert-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+          <div id="formAlertText" class="alert-text"></div>
+        </div>
+
+        <form id="reportForm" novalidate>
+
+          <!-- Group 1: Patient Context -->
+          <div class="console-group">
+            <div class="console-group-header">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+              <span>1. Patient &amp; Reporter Demographics</span>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="patientAge">Age (years)</label>
+                <div class="input-glow-wrapper">
+                  <input type="number" id="patientAge" name="patient_age" class="form-control" min="0" max="120" placeholder="e.g. 42" aria-describedby="patientAgeErr">
+                </div>
+                <div id="patientAgeErr" class="field-error">Age must be between 0 and 120.</div>
+              </div>
+
+              <div class="form-group">
+                <label for="patientSex">Biological Sex <span class="required-indicator" aria-hidden="true">*</span></label>
+                <!-- Segmented Control for Sex -->
+                <div class="segmented-control sex-segments" role="radiogroup" aria-label="Biological Sex">
+                  <button type="button" class="segment-btn active" data-val="female">Female</button>
+                  <button type="button" class="segment-btn" data-val="male">Male</button>
+                  <button type="button" class="segment-btn" data-val="other">Other</button>
+                  <button type="button" class="segment-btn" data-val="unknown">Unknown</button>
+                </div>
+                <select id="patientSex" name="patient_sex" class="form-control select-hidden" required aria-describedby="patientSexErr">
+                  <option value="female" selected>Female</option>
+                  <option value="male">Male</option>
+                  <option value="other">Other</option>
+                  <option value="unknown">Unknown</option>
+                </select>
+                <div id="patientSexErr" class="field-error">Patient sex is required.</div>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="reporterType">Reporter Qualification <span class="required-indicator" aria-hidden="true">*</span></label>
+              <!-- Segmented Control for Reporter Type -->
+              <div class="segmented-control reporter-segments" role="radiogroup" aria-label="Reporter Qualification">
+                <button type="button" class="segment-btn active" data-val="physician">Physician (MD)</button>
+                <button type="button" class="segment-btn" data-val="pharmacist">Pharmacist</button>
+                <button type="button" class="segment-btn" data-val="other_hcp">Other HCP</button>
+                <button type="button" class="segment-btn" data-val="patient">Patient/Consumer</button>
+              </div>
+              <select id="reporterType" name="reporter_type" class="form-control select-hidden" required aria-describedby="reporterTypeErr">
+                <option value="physician" selected>Physician</option>
+                <option value="pharmacist">Pharmacist</option>
+                <option value="other_hcp">Other healthcare professional</option>
+                <option value="consumer">Consumer</option>
+                <option value="patient">Patient</option>
+              </select>
+              <div id="reporterTypeErr" class="field-error">Reporter type is required.</div>
+            </div>
+          </div>
+
+          <!-- Group 2: Suspect Medication -->
+          <div class="console-group">
+            <div class="console-group-header">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+              </svg>
+              <span>2. Suspect Medicinal Product</span>
+            </div>
+
+            <div class="form-group">
+              <div class="label-row">
+                <label for="suspectDrug">Active Substance / Medicinal Product <span class="required-indicator" aria-hidden="true">*</span></label>
+                <span class="micro-status-pill">Corpus Indexed</span>
+              </div>
+              <div class="input-glow-wrapper">
+                <input type="text" id="suspectDrug" name="suspect_drug" class="form-control" placeholder="e.g. Lamotrigine" required aria-describedby="suspectDrugErr" autocomplete="off">
+              </div>
+              <div id="suspectDrugErr" class="field-error">Suspect drug name is required.</div>
+              <div class="quick-substance-tags">
+                <span class="tag-label">Index Shortcuts:</span>
+                <button type="button" class="drug-shortcut-pill" data-drug="Lamotrigine">Lamotrigine (Approved PI)</button>
+                <button type="button" class="drug-shortcut-pill" data-drug="ExperimentalCompound-X">ExperimentalCompound-X (Out of corpus)</button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="drugStartDate">Therapy Initiation Date <span class="required-indicator" aria-hidden="true">*</span></label>
+              <div class="input-glow-wrapper">
+                <input type="date" id="drugStartDate" name="drug_start_date" class="form-control" required aria-describedby="drugStartDateErr">
+              </div>
+              <div id="drugStartDateErr" class="field-error">Valid start date required (cannot be in future).</div>
+            </div>
+          </div>
+
+          <!-- Group 3: Reaction & Narrative -->
+          <div class="console-group">
+            <div class="console-group-header">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+              </svg>
+              <span>3. Adverse Reaction &amp; Clinical Outcome</span>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="eventDate">Onset Date <span class="required-indicator" aria-hidden="true">*</span></label>
+                <div class="input-glow-wrapper">
+                  <input type="date" id="eventDate" name="event_date" class="form-control" required aria-describedby="eventDateErr">
+                </div>
+                <div id="eventDateErr" class="field-error">Onset date must be on or after drug start date.</div>
+              </div>
+
+              <div class="form-group">
+                <label for="outcome">Clinical Outcome <span class="required-indicator" aria-hidden="true">*</span></label>
+                <div class="select-glow-wrapper">
+                  <select id="outcome" name="outcome" class="form-control" required aria-describedby="outcomeErr">
+                    <option value="recovering" selected>Recovering</option>
+                    <option value="recovered">Recovered (Resolved)</option>
+                    <option value="not_recovered">Not recovered (Ongoing)</option>
+                    <option value="recovered_with_sequelae">Recovered with sequelae</option>
+                    <option value="fatal">Fatal</option>
+                    <option value="unknown">Unknown</option>
+                  </select>
+                </div>
+                <div id="outcomeErr" class="field-error">Outcome is required.</div>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <div class="label-row">
+                <label for="reactionDesc">Reaction Description <span class="required-indicator" aria-hidden="true">*</span></label>
+                <span id="charCountReaction" class="char-counter-chip">0 / 2000</span>
+              </div>
+              <div class="textarea-glow-wrapper">
+                <textarea id="reactionDesc" name="reaction_description" class="form-control" rows="3" placeholder="Describe the adverse reaction in clinical or verbatim terms (e.g. skin peeling, epidermal detachment, Stevens-Johnson syndrome, hospital admission)..." required maxlength="2000" aria-describedby="reactionDescHint reactionDescErr"></textarea>
+              </div>
+              <div id="reactionDescHint" class="form-hint">Medical entities are semantically matched against the regulatory corpus &amp; product insert.</div>
+              <div id="reactionDescErr" class="field-error">Reaction description cannot be empty.</div>
+            </div>
+
+            <div class="form-group">
+              <div class="label-row">
+                <label for="narrative">Clinical Narrative &amp; Concomitant Meds</label>
+                <span class="optional-tag">Optional</span>
+              </div>
+              <div class="textarea-glow-wrapper">
+                <textarea id="narrative" name="narrative" class="form-control" rows="2" placeholder="Relevant medical history, lab values, concomitant therapies, or dechallenge findings..." maxlength="5000"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <!-- Submit Button Action -->
+          <div class="form-action-row">
+            <button type="submit" id="btnSubmit" class="btn-hero-submit">
+              <span class="spinner" aria-hidden="true"></span>
+              <svg class="btn-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+              </svg>
+              <span id="btnSubmitText">Initiate Clinical Triage</span>
+              <span class="btn-kbd-badge" title="Shortcut: Cmd+Enter or Ctrl+Enter">
+                <kbd>⌘</kbd>+<kbd>Enter</kbd>
+              </span>
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <!-- RIGHT COLUMN: Assessment & Decision Workspace -->
+      <section class="glass-card workspace-card" aria-labelledby="assessmentTitle" aria-live="polite">
+        <div class="glass-card-header">
+          <div class="header-title-cluster">
+            <div class="header-icon-hex hex-teal">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+              </svg>
+            </div>
+            <div>
+              <h2 id="assessmentTitle" class="section-title">Regulatory Decision HUD</h2>
+              <p class="section-subtitle">Multi-Agent Assessment &amp; Statutory Grounding</p>
+            </div>
+          </div>
+          <div class="workspace-mode-badge">
+            <span id="workspaceStatePill" class="hud-status-chip chip-standby">Standby</span>
+          </div>
+        </div>
+
+        <!-- State 1: Ready / Standby Mode -->
+        <div id="emptyState" class="empty-state">
+          <div class="radar-container">
+            <div class="radar-scan-line"></div>
+            <div class="radar-circle radar-circle-1"></div>
+            <div class="radar-circle radar-circle-2"></div>
+            <div class="radar-circle radar-circle-3"></div>
+            <svg class="radar-center-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+              <path d="M9 12l2 2 4-4"></path>
+            </svg>
+          </div>
+
+          <h3 class="standby-title">Autonomous Triage Engine Ready</h3>
+          <p class="standby-desc">Submit an adverse event case via the intake console or click a benchmark scenario to run the end-to-end multi-agent assessment workflow.</p>
+
+          <div class="standby-matrix">
+            <div class="matrix-item">
+              <div class="matrix-check">✓</div>
+              <div class="matrix-content">
+                <strong>IPC Pharmacovigilance Guidance for MAHs (Sec 4)</strong>
+                <span>Seriousness statutory criteria (death, hospitalisation, disability, congenital, life-threatening)</span>
+              </div>
+            </div>
+            <div class="matrix-item">
+              <div class="matrix-check">✓</div>
+              <div class="matrix-content">
+                <strong>New Drugs &amp; Clinical Trials Rules 2019 (Table 1)</strong>
+                <span>Statutory 15-day expedited reporting timeline evaluation to CLA</span>
+              </div>
+            </div>
+            <div class="matrix-item">
+              <div class="matrix-check">✓</div>
+              <div class="matrix-content">
+                <strong>ChromaDB 1536-dim Grounding Audit</strong>
+                <span>Zero hallucination guarantee: citations strictly verified against approved product information</span>
+              </div>
+            </div>
+          </div>
+
+          <button type="button" id="btnEmptyLoadRef" class="btn-standby-launch">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+            </svg>
+            <span>Run Benchmark Reference Case</span>
+          </button>
+        </div>
+
+        <!-- State 2: Running State with Multi-Agent Neural Pipeline -->
+        <div id="runningState" class="running-state">
+          <div class="running-top-banner">
+            <div class="pipeline-status-pulse">
+              <span class="core-dot"></span>
+              <span class="outer-wave"></span>
+            </div>
+            <div class="pipeline-status-text">
+              <h3 class="pipeline-title">Multi-Agent Workflow In Progress</h3>
+              <p class="pipeline-subtitle">Asynchronous orchestration through Redis RQ &amp; LangGraph</p>
+            </div>
+            <div class="pipeline-stopwatch">
+              <span class="stopwatch-label">LATENCY</span>
+              <span id="elapsedTime" class="stopwatch-val">0.0s</span>
+            </div>
+          </div>
+
+          <!-- Multi-Agent Neural Pipeline Stepper -->
+          <div class="pipeline-flow-wrapper">
+            <div class="pipeline-nodes" role="progressbar" aria-valuenow="1" aria-valuemin="1" aria-valuemax="5">
+              
+              <div class="pipeline-node active" id="stepQueued">
+                <div class="node-ring">
+                  <span class="node-num">1</span>
+                  <svg class="node-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                </div>
+                <div class="node-meta">
+                  <span class="node-title">Redis RQ</span>
+                  <span class="node-sub">Job Enqueued</span>
+                </div>
+              </div>
+
+              <div class="node-beam"></div>
+
+              <div class="pipeline-node" id="stepRetrieving">
+                <div class="node-ring">
+                  <span class="node-num">2</span>
+                  <svg class="node-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                </div>
+                <div class="node-meta">
+                  <span class="node-title">Vector RAG</span>
+                  <span class="node-sub">ChromaDB</span>
+                </div>
+              </div>
+
+              <div class="node-beam"></div>
+
+              <div class="pipeline-node" id="stepAssessing">
+                <div class="node-ring">
+                  <span class="node-num">3</span>
+                  <svg class="node-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                </div>
+                <div class="node-meta">
+                  <span class="node-title">Assessor</span>
+                  <span class="node-sub">LangGraph</span>
+                </div>
+              </div>
+
+              <div class="node-beam"></div>
+
+              <div class="pipeline-node" id="stepVerifying">
+                <div class="node-ring">
+                  <span class="node-num">4</span>
+                  <svg class="node-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                </div>
+                <div class="node-meta">
+                  <span class="node-title">Verifier</span>
+                  <span class="node-sub">Grounding Audit</span>
+                </div>
+              </div>
+
+              <div class="node-beam"></div>
+
+              <div class="pipeline-node" id="stepDone">
+                <div class="node-ring">
+                  <span class="node-num">5</span>
+                  <svg class="node-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                </div>
+                <div class="node-meta">
+                  <span class="node-title">Verdict</span>
+                  <span class="node-sub">Routing Finalized</span>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Console Telemetry Log -->
+          <div class="live-console-feed">
+            <div class="console-prefix">
+              <span class="console-prompt">&gt;_</span>
+              <span class="console-label">AGENT LOG STREAM:</span>
+            </div>
+            <p id="stepperAnnounce">Job enqueued in Redis task queue; awaiting worker pickup...</p>
+          </div>
+        </div>
+
+        <!-- State 3 & 4: Result Display (Completed or Escalated) -->
+        <div id="resultDisplay" class="result-display">
+
+          <!-- Hero Decision Verdict Banner -->
+          <div class="verdict-hero-card">
+            <div class="verdict-primary-col">
+              <div class="verdict-eyebrow">STATUTORY REGULATORY DETERMINATION</div>
+              <div class="verdict-routing-row">
+                <span id="routingBadge" class="badge badge-expedited">Expedited 15-day</span>
+                <span id="verificationBadge" class="badge badge-verified">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                  100% Grounded
+                </span>
+              </div>
+            </div>
+
+            <div class="verdict-meta-col">
+              <div class="run-id-pill">
+                <span class="run-id-label">RUN ID:</span>
+                <span id="resultRunId">rep_00000000</span>
+                <button type="button" id="btnCopyRunId" class="copy-btn" title="Copy run ID to clipboard">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                  </svg>
+                </button>
+              </div>
+              <span id="resultLatencyPill" class="env-chip latency-chip">112ms</span>
+            </div>
+          </div>
+
+          <!-- Escalation Banner (Displayed only when status is escalated) -->
+          <div id="escalationBanner" class="escalation-banner" style="display: none;">
+            <div class="escalation-header">
+              <div class="esc-icon-circle">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                  <line x1="12" y1="9" x2="12" y2="13"></line>
+                  <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+              </div>
+              <div>
+                <span class="esc-title">Escalated to Qualified Person (QPPV)</span>
+                <div class="esc-subtitle">Autonomous determination halted to prevent unconfident regulatory filing</div>
+              </div>
+            </div>
+            <div id="escalationReason" class="escalation-body">Reason: Reaction could not be resolved against package insert with confidence.</div>
+            <div id="escalationAction" class="escalation-action">Recommended human action: Qualified Person review required. Verify product insert and consult prescribing physician.</div>
+          </div>
+
+          <!-- Clinical Triage 3-KPI Analytics Grid -->
+          <div class="summary-tiles">
+            <!-- KPI 1: Seriousness -->
+            <div class="tile tile-seriousness">
+              <div class="tile-header">
+                <span class="tile-label">Seriousness</span>
+                <div class="tile-badge-icon">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+                  </svg>
+                </div>
+              </div>
+              <div id="seriousnessValue" class="tile-val">Serious</div>
+              <div id="seriousnessBasis" class="tile-basis">Criteria: Hospitalisation</div>
+            </div>
+
+            <!-- KPI 2: Expectedness -->
+            <div class="tile tile-expectedness">
+              <div class="tile-header">
+                <span class="tile-label">Expectedness</span>
+                <div class="tile-badge-icon">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                  </svg>
+                </div>
+              </div>
+              <div id="expectednessValue" class="tile-val">Unexpected</div>
+              <div id="expectednessBasis" class="tile-basis">Not listed in package insert</div>
+            </div>
+
+            <!-- KPI 3: Routing -->
+            <div class="tile tile-routing">
+              <div class="tile-header">
+                <span class="tile-label">Statutory Timeline</span>
+                <div class="tile-badge-icon">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                  </svg>
+                </div>
+              </div>
+              <div id="routingValue" class="tile-val">Expedited 15-day</div>
+              <div id="routingBasisText" class="tile-basis">Statutory NDCT 2019 Table 1 timeline applies</div>
+            </div>
+          </div>
+
+          <!-- Retrieved Regulatory Citations Section -->
+          <div class="citations-section">
+            <div class="section-header-row">
+              <h3 class="section-heading">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                </svg>
+                <span>Regulatory Grounding Dossier (<span id="citationCount">0</span> Citations)</span>
+              </h3>
+              <span class="dossier-pill">Vector Cosine Grounded</span>
+            </div>
+            <div id="citationList" class="citation-list"></div>
+          </div>
+
+          <!-- Execution Trace & Tool Calls Drawer -->
+          <div class="trace-drawer">
+            <button type="button" id="btnToggleTrace" class="trace-toggle-btn" aria-expanded="false">
+              <div class="trace-toggle-left">
+                <div class="trace-icon-cube">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                  </svg>
+                </div>
+                <span>Multi-Agent Execution Waterfall &amp; Token Audit</span>
+              </div>
+              <svg id="traceChevron" class="chevron-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
+            <div id="traceContent" class="trace-content">
+              <div id="traceItems"></div>
+            </div>
+          </div>
+
+          <!-- Evaluator Decision Feedback Card -->
+          <div class="feedback-card">
+            <div class="feedback-header">
+              <div class="feedback-title">Qualified Person (QPPV) Validation Feedback</div>
+              <span class="feedback-badge">Human-in-the-Loop</span>
+            </div>
+            <div class="feedback-buttons">
+              <button type="button" id="btnThumbUp" class="btn-feedback" title="Agree with triage determination">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path>
+                </svg>
+                <span>Concur with determination</span>
+              </button>
+              <button type="button" id="btnThumbDown" class="btn-feedback" title="Disagree or requires correction">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-3"></path>
+                </svg>
+                <span>Disagree / Flag for review</span>
+              </button>
+            </div>
+            <input type="text" id="feedbackReason" class="feedback-reason-input" placeholder="Clinical reasoning, citation grounding observations, or corrected routing...">
+            <button type="button" id="btnSubmitFeedback" class="feedback-submit-btn">Save Evaluator Assessment</button>
+          </div>
+        </div>
+
+      </section>
+
+    </div>
+  </div>
+</main>
+
+  <!-- Modal: Update Patient Condition & Dr. Guidance -->
+  <div id="patientModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="patientModalTitle">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title-cluster">
+          <div class="modal-icon-wrap">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+          </div>
+          <div>
+            <h3 id="patientModalTitle" class="modal-title">Patient Clinical Management</h3>
+            <p id="patientModalSubtitle" class="modal-subtitle">Update condition status, clinical directives, and reception guidance</p>
+          </div>
+        </div>
+        <button type="button" id="btnModalClose" class="modal-close-btn" aria-label="Close dialog">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <div id="modalPatientInfoCard" class="patient-info-summary" style="background: var(--surface-alt); padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border);">
+          <!-- Dynamic Patient Header info -->
+        </div>
+
+        <div class="form-group">
+          <label for="modalPatientCondition">Patient Clinical Condition <span class="required-indicator">*</span></label>
+          <div class="select-glow-wrapper">
+            <select id="modalPatientCondition" class="form-control">
+              <option value="Hospitalised (ICU)">Hospitalised (ICU) — Critical Monitoring</option>
+              <option value="Hospitalised (Ward)">Hospitalised (Ward) — Inpatient Admission</option>
+              <option value="Under Observation">Under Observation — Ambulatory Clinic</option>
+              <option value="Recovering">Recovering — Resolving Symptoms</option>
+              <option value="Resolved / Discharged">Resolved / Discharged — Full Recovery</option>
+              <option value="Fatal / Serious Sequelae">Serious Sequelae / Life Threatening</option>
+            </select>
+          </div>
+          <div class="form-hint">Updating condition status notifies attending medical staff and reception desk.</div>
+        </div>
+
+        <div class="form-group">
+          <label for="modalDoctorGuidance">Doctor's Guidance &amp; Instructions (Prescriptions / Reception Notice) <span class="required-indicator">*</span></label>
+          <div class="textarea-glow-wrapper">
+            <textarea id="modalDoctorGuidance" class="form-control" rows="4" placeholder="Enter clinical directives, medication holds, escalation protocol, or instructions for clinic reception..."></textarea>
+          </div>
+          <div class="form-hint">This guidance is immediately visible to clinic receptionists and nursing staff.</div>
+        </div>
+
+        <div class="form-group" id="modalAttachedFilesGroup">
+          <label>Attached Medical Documents &amp; Lab Notes</label>
+          <div id="modalAttachedFilesList" class="attached-files-list">
+            <!-- Dynamic files -->
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" id="btnModalCancel" class="btn-action-secondary">Close</button>
+        <button type="button" id="btnModalSave" class="btn-action-primary admin-only-feature">Save Patient Updates</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Upload Medical Report Document -->
+  <div id="fileUploadModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="uploadModalTitle">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title-cluster">
+          <div class="modal-icon-wrap">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+          </div>
+          <div>
+            <h3 id="uploadModalTitle" class="modal-title">Upload Clinical Report Document</h3>
+            <p class="modal-subtitle">Attach PDF report, lab findings, or hospital discharge summary</p>
+          </div>
+        </div>
+        <button type="button" id="btnUploadModalClose" class="modal-close-btn" aria-label="Close dialog">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="uploadTargetPatient">Select Target Patient Record <span class="required-indicator">*</span></label>
+          <div class="select-glow-wrapper">
+            <select id="uploadTargetPatient" class="form-control">
+              <!-- Dynamically populated -->
+            </select>
+          </div>
+        </div>
+
+        <div class="file-dropzone" id="fileDropzone">
+          <input type="file" id="fileInputEl" accept=".pdf,.txt,.json,.doc,.docx" multiple>
+          <div class="dropzone-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="12" y1="18" x2="12" y2="12"></line>
+              <line x1="9" y1="15" x2="12" y2="12"></line>
+              <line x1="15" y1="15" x2="12" y2="12"></line>
+            </svg>
+          </div>
+          <div class="dropzone-text">Click to browse or drag &amp; drop medical report files</div>
+          <div class="dropzone-hint">Supports PDF, DOCX, TXT, JSON (Max 25MB per file)</div>
+        </div>
+
+        <div id="uploadFileListPreview" class="attached-files-list"></div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" id="btnUploadModalCancel" class="btn-action-secondary">Cancel</button>
+        <button type="button" id="btnUploadModalSubmit" class="btn-action-primary">Attach Files &amp; Update Record</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Persistent Regulatory Compliance Footer -->
+  <footer class="app-footer">
+    <div class="footer-container">
+      <div class="footer-badge-row">
+        <span class="compliance-badge">IPC Pharmacovigilance Guidance for MAHs 2019</span>
+        <span class="compliance-badge">NDCT Rules 2019 Second Schedule Table 1</span>
+        <span class="compliance-badge">ICH E2A Clinical Safety Data Management</span>
+      </div>
+      <p class="footer-disclaimer">Decision support only. A qualified person for pharmacovigilance makes every determination. This tool never submits a regulatory report.</p>
+      <p class="footer-subtext">OpenTelemetry Jaeger Distributed Tracing &bull; Prometheus Latency &amp; Queue Metrics &bull; ChromaDB Semantic Verification</p>
+    </div>
+  </footer>
+
+  <!-- Slide-Over Patient Clinical Inspector Drawer -->
+  <div id="drawerBackdrop" class="drawer-backdrop" aria-hidden="true">
+    <aside id="patientDrawer" class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="drawerPatientTitle">
+      <div class="drawer-header">
+        <div class="drawer-header-left">
+          <div class="drawer-avatar-badge" id="drawerAvatarBadge">PS</div>
+          <div>
+            <h3 id="drawerPatientTitle" class="drawer-title">Priya Sharma</h3>
+            <span id="drawerPatientSubtitle" class="drawer-subtitle">PAT-8821 &bull; 42 yrs &bull; Female &bull; Monitored Day 8</span>
+          </div>
+        </div>
+        <button type="button" id="drawerCloseBtn" class="modal-close-btn" aria-label="Close Inspector">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="drawer-body">
+        <!-- Realtime Vitals HUD -->
+        <div class="drawer-section-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+          <span>Live Biometric Telemetry</span>
+        </div>
+        <div class="drawer-vitals-grid">
+          <div class="drawer-vital-card">
+            <span class="drawer-vital-label">Heart Rate</span>
+            <span id="drawerVitalHR" class="drawer-vital-val" style="color: #F87171;">118 BPM</span>
+            <span class="vital-mini-status">Tachycardia</span>
+          </div>
+          <div class="drawer-vital-card">
+            <span class="drawer-vital-label">Blood Press.</span>
+            <span id="drawerVitalBP" class="drawer-vital-val" style="color: #FB923C;">88/58</span>
+            <span class="vital-mini-status">Hypotensive</span>
+          </div>
+          <div class="drawer-vital-card">
+            <span class="drawer-vital-label">SpO2 Sat.</span>
+            <span id="drawerVitalSPO2" class="drawer-vital-val" style="color: #4ADE80;">95%</span>
+            <span class="vital-mini-status">Acceptable</span>
+          </div>
+          <div class="drawer-vital-card">
+            <span class="drawer-vital-label">Temperature</span>
+            <span id="drawerVitalTemp" class="drawer-vital-val" style="color: #F87171;">39.2°C</span>
+            <span class="vital-mini-status">Febrile Spike</span>
+          </div>
+        </div>
+
+        <!-- Interactive Condition Radio Selector -->
+        <div class="drawer-section-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          <span>Clinical Condition State</span>
+        </div>
+        <div class="condition-radio-matrix" id="drawerConditionMatrix">
+          <!-- Dynamically populated by app.js -->
+        </div>
+
+        <!-- Doctor Guidance Authoring & Directive Chips -->
+        <div class="drawer-section-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+          <span>Doctor's Directives (For Reception &amp; Ward)</span>
+        </div>
+        <div class="directive-quick-chips admin-only-feature">
+          <span class="chips-label">Quick Directive Tags:</span>
+          <div class="chips-row">
+            <button type="button" class="directive-chip" data-text="Discontinue suspect medication immediately.">+ Drug Hold</button>
+            <button type="button" class="directive-chip" data-text="Administer IV methylprednisolone 500mg daily.">+ IV Steroids</button>
+            <button type="button" class="directive-chip" data-text="Transfer patient to Burn ICU for barrier dressings.">+ Burn ICU</button>
+            <button type="button" class="directive-chip" data-text="Order urgent HLA-B*1502 genetic screening.">+ HLA-B*1502</button>
+            <button type="button" class="directive-chip" data-text="Statutory CDSCO 15-day expedited filing initiated.">+ CDSCO 15-Day</button>
+            <button type="button" class="directive-chip" data-text="Notify clinic reception of urgent specialist consult.">+ Reception Notice</button>
+          </div>
+        </div>
+        <div class="textarea-glow-wrapper">
+          <textarea id="drawerGuidanceInput" class="form-control" rows="4" placeholder="Enter clinical directives, medication holds, or reception instructions..."></textarea>
+        </div>
+
+        <!-- Attached Documents -->
+        <div class="drawer-section-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+          <span>Attached Clinical Documents</span>
+        </div>
+        <div id="drawerFilesList" class="attached-files-list"></div>
+        <button type="button" id="btnDrawerAttachReport" class="btn-action-secondary admin-only-feature" style="margin-top: 8px; width: 100%; justify-content: center;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+          <span>Attach Additional PDF / Lab Report</span>
+        </button>
+
+        <!-- Adverse Reaction Dossier & Timeline -->
+        <div class="drawer-section-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 10"></polyline></svg>
+          <span>Clinical Progression Timeline</span>
+        </div>
+        <div class="drawer-timeline-stepper" id="drawerTimeline">
+          <!-- Dynamically populated by app.js -->
+        </div>
+      </div>
+      <div class="drawer-footer">
+        <button type="button" id="btnDrawerRunTriage" class="btn-card-action" style="margin-right: auto;" title="Load this case directly into the AI Clinical Triage Cockpit">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+          <span>Load in AI Triage Cockpit</span>
+        </button>
+        <button type="button" id="drawerCancelBtn" class="btn-action-secondary">Close</button>
+        <button type="button" id="drawerSaveBtn" class="btn-action-primary admin-only-feature">Save Clinical Updates</button>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
+  <!-- Motion & Smooth Scroll Architecture (GSAP & Lenis) -->
+  <script src="vendor/gsap.min.js"></script>
+  <script src="vendor/lenis.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

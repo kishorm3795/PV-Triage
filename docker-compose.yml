@@ -16,7 +16,7 @@ services:
   stub-llm:
     build:
       context: .
-      dockerfile: stub_llm/Dockerfile
+      dockerfile: backend/stub_llm/Dockerfile
     ports:
       - "8001:8001"
     environment:
@@ -47,7 +47,7 @@ services:
   ingest:
     build:
       context: .
-      dockerfile: worker/Dockerfile
+      dockerfile: backend/worker/Dockerfile
     command: python -c "import os; print('Corpus index verified at', os.getenv('CHROMA_DIR', '/app/data/chroma'))"
     environment:
       - CHROMA_DIR=${CHROMA_DIR:-/app/data/chroma}
@@ -59,7 +59,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: api/Dockerfile
+      dockerfile: backend/api/Dockerfile
     ports:
       - "8000:8000"
     depends_on:
@@ -80,6 +80,7 @@ services:
     volumes:
       - ./data/chroma:/app/data/chroma:ro
       - traces_data:/app/data/traces
+      - ./frontend:/app/frontend:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 3s
@@ -90,7 +91,7 @@ services:
   worker:
     build:
       context: .
-      dockerfile: worker/Dockerfile
+      dockerfile: backend/worker/Dockerfile
     # Scalable: no container_name and no fixed host port mapping
     depends_on:
       redis:
