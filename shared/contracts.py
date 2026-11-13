@@ -94,6 +94,7 @@ class RunResult(BaseModel):
     prompt_versions: dict[str, str] = Field(default_factory=dict)
     tool_calls: list[ToolCall] = Field(default_factory=list)
     trace: list[TraceStep] = Field(default_factory=list)
+    verification_passed: bool | None = None
 
 
 @runtime_checkable

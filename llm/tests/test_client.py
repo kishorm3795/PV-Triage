@@ -1,11 +1,11 @@
 """llm/tests/test_client.py - Unit tests for LLM client abstraction."""
 
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, PropertyMock
 import pytest
 import requests
 
-from llm.client import LLMClient, LLMResponse
+from llm.client import LLMClient, LLMResponse, _SESSION_POOL
 
 
 def test_llm_response_access():
@@ -56,11 +56,15 @@ def test_stub_provider_success(monkeypatch):
         "model": "stub-llm",
     }
 
-    with patch("requests.post", return_value=mock_resp) as mock_post:
+    # Mock the session's post method
+    mock_session = MagicMock()
+    mock_session.post.return_value = mock_resp
+    
+    with patch.object(_SESSION_POOL, 'get_session', return_value=mock_session):
         res = client.generate(prompt="Analyze this case", system="You are PV assessor")
 
-        mock_post.assert_called_once()
-        call_args = mock_post.call_args
+        mock_session.post.assert_called_once()
+        call_args = mock_session.post.call_args
         assert call_args[0][0] == "http://fake-stub:8001/generate"
         assert call_args[1]["json"]["prompt"] == "Analyze this case"
         assert call_args[1]["json"]["system"] == "You are PV assessor"
@@ -79,7 +83,10 @@ def test_stub_provider_failure(monkeypatch):
 
     client = LLMClient()
 
-    with patch("requests.post", side_effect=requests.RequestException("Connection refused")):
+    mock_session = MagicMock()
+    mock_session.post.side_effect = requests.RequestException("Connection refused")
+    
+    with patch.object(_SESSION_POOL, 'get_session', return_value=mock_session):
         with pytest.raises(RuntimeError) as exc:
             client.generate(prompt="Test")
         assert "Stub LLM request failed" in str(exc.value)
@@ -107,31 +114,28 @@ def test_gemini_provider_success(monkeypatch):
     mock_resp = MagicMock()
     mock_resp.status_code = 200
     mock_resp.json.return_value = {
-        "candidates": [
-            {
-                "content": {
-                    "parts": [{"text": "Gemini generated triage assessment"}]
-                }
-            }
-        ],
+        "candidates": [{"content": {"parts": [{"text": "Gemini generated triage assessment"}]}}],
         "usageMetadata": {
             "promptTokenCount": 85,
             "candidatesTokenCount": 35,
         },
     }
 
-    with patch("requests.post", return_value=mock_resp) as mock_post:
+    mock_session = MagicMock()
+    mock_session.post.return_value = mock_resp
+    
+    with patch.object(_SESSION_POOL, 'get_session', return_value=mock_session):
         res = client.generate(
             prompt="Evaluate adverse event",
             system="System prompt",
             temperature=0.2,
         )
 
-        mock_post.assert_called_once()
-        url = mock_post.call_args[0][0]
+        mock_session.post.assert_called_once()
+        url = mock_session.post.call_args[0][0]
         assert "key=test_gemini_key" in url
         assert "gemini-1.5-pro" in url
-        body = mock_post.call_args[1]["json"]
+        body = mock_session.post.call_args[1]["json"]
         assert body["contents"][0]["parts"][0]["text"] == "Evaluate adverse event"
         assert body["system_instruction"]["parts"][0]["text"] == "System prompt"
 
@@ -150,6 +154,9 @@ def test_timeout_override(monkeypatch):
     mock_resp.status_code = 200
     mock_resp.json.return_value = {"text": "ok", "prompt_tokens": 1, "completion_tokens": 1}
 
-    with patch("requests.post", return_value=mock_resp) as mock_post:
+    mock_session = MagicMock()
+    mock_session.post.return_value = mock_resp
+    
+    with patch.object(_SESSION_POOL, 'get_session', return_value=mock_session):
         client.generate("test prompt", timeout=5.0)
-        assert mock_post.call_args[1]["timeout"] == 5.0
+        assert mock_session.post.call_args[1]["timeout"] == 5.0

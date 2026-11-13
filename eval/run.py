@@ -56,13 +56,17 @@ def run_scenario_direct(
                 passages = search(q, k=5)
                 for p in passages:
                     if p.id not in seen_ids:
-                        retrieved_passages.append(p.model_dump() if hasattr(p, "model_dump") else p.__dict__)
+                        retrieved_passages.append(
+                            p.model_dump() if hasattr(p, "model_dump") else p.__dict__
+                        )
                         seen_ids.add(p.id)
             elif cid:
                 retriever = get_retriever()
                 p = retriever.get_clause(cid)
                 if p and p.id not in seen_ids:
-                    retrieved_passages.append(p.model_dump() if hasattr(p, "model_dump") else p.__dict__)
+                    retrieved_passages.append(
+                        p.model_dump() if hasattr(p, "model_dump") else p.__dict__
+                    )
                     seen_ids.add(p.id)
 
     return result_dict, retrieved_passages
@@ -137,12 +141,16 @@ def run_scenario_api(
                         passages = search(q, k=5)
                         for p in passages:
                             if p.id not in seen_ids:
-                                retrieved_passages.append(p.model_dump() if hasattr(p, "model_dump") else p.__dict__)
+                                retrieved_passages.append(
+                                    p.model_dump() if hasattr(p, "model_dump") else p.__dict__
+                                )
                                 seen_ids.add(p.id)
                     elif cid:
                         p = get_retriever().get_clause(cid)
                         if p and p.id not in seen_ids:
-                            retrieved_passages.append(p.model_dump() if hasattr(p, "model_dump") else p.__dict__)
+                            retrieved_passages.append(
+                                p.model_dump() if hasattr(p, "model_dump") else p.__dict__
+                            )
                             seen_ids.add(p.id)
     except Exception as exc:
         logger.debug("Failed querying trace for %s: %s", run_id, exc)
@@ -152,10 +160,20 @@ def run_scenario_api(
 
 def main():
     parser = argparse.ArgumentParser(description="PV-Triage Evaluation Harness")
-    parser.add_argument("--prompt-version", default="v1", help="Prompt version tag to evaluate (e.g. v1, v2)")
-    parser.add_argument("--set", default="eval/scenarios.jsonl", help="Path to scenario JSONL dataset")
-    parser.add_argument("--direct", action="store_true", help="Execute in-process direct graph call instead of API")
-    parser.add_argument("--force-invalid", action="store_true", help="Enable B's deliberate change: force invalid citations")
+    parser.add_argument(
+        "--prompt-version", default="v1", help="Prompt version tag to evaluate (e.g. v1, v2)"
+    )
+    parser.add_argument(
+        "--set", default="eval/scenarios.jsonl", help="Path to scenario JSONL dataset"
+    )
+    parser.add_argument(
+        "--direct", action="store_true", help="Execute in-process direct graph call instead of API"
+    )
+    parser.add_argument(
+        "--force-invalid",
+        action="store_true",
+        help="Enable B's deliberate change: force invalid citations",
+    )
     parser.add_argument("--api-url", default="http://localhost:8000", help="Base URL of live API")
     parser.add_argument("--out", default=None, help="Output JSON path")
     args = parser.parse_args()
@@ -173,14 +191,18 @@ def main():
                 scenarios.append(json.loads(line))
 
     llm_provider = os.getenv("LLM_PROVIDER", "stub")
-    mode_str = "direct (in-process run_graph)" if args.direct else f"full-stack API ({args.api_url})"
+    mode_str = (
+        "direct (in-process run_graph)" if args.direct else f"full-stack API ({args.api_url})"
+    )
     print(f"======================================================================")
     print(f"PV-Triage Benchmark Evaluation")
     print(f"Dataset:        {args.set} ({len(scenarios)} scenarios)")
     print(f"Prompt Version: {args.prompt_version}")
     print(f"Execution Mode: {mode_str}")
     print(f"LLM Provider:   {llm_provider}")
-    print(f"Deliberate Hook:{'FORCE_INVALID_CITATION=True' if args.force_invalid else 'None (Normal)'}")
+    print(
+        f"Deliberate Hook:{'FORCE_INVALID_CITATION=True' if args.force_invalid else 'None (Normal)'}"
+    )
     print(f"======================================================================")
 
     results: List[Dict[str, Any]] = []
@@ -193,9 +215,13 @@ def main():
 
         scen_start = time.time()
         if args.direct:
-            run_result, retrieved = run_scenario_direct(scen, run_id, args.prompt_version, args.force_invalid)
+            run_result, retrieved = run_scenario_direct(
+                scen, run_id, args.prompt_version, args.force_invalid
+            )
         else:
-            run_result, retrieved = run_scenario_api(scen, args.api_url, args.prompt_version, args.force_invalid)
+            run_result, retrieved = run_scenario_api(
+                scen, args.api_url, args.prompt_version, args.force_invalid
+            )
         latency = round(time.time() - scen_start, 3)
 
         eval_metric = evaluate_run(scen, run_result, retrieved)
@@ -230,14 +256,26 @@ def main():
     passed_count = sum(1 for r in results if r["passed"])
 
     print("\n" + "=" * 70)
-    print(f"EVALUATION SUMMARY: {passed_count}/{len(results)} Scenarios Passed ({passed_count/len(results)*100:.1f}%)")
+    print(
+        f"EVALUATION SUMMARY: {passed_count}/{len(results)} Scenarios Passed ({passed_count / len(results) * 100:.1f}%)"
+    )
     print("=" * 70)
-    print(f"  * Groundedness:           {avg_groundedness * 100:6.2f}% (claims supported by retrieved text)")
-    print(f"  * Context Relevance:      {avg_context_rel * 100:6.2f}% (semantic alignment of passages)")
-    print(f"  * Faithfulness:           {avg_faithfulness * 100:6.2f}% (verbatim citation agreement)")
-    print(f"  * Hallucination Rate:     {hallucination_rate * 100:6.2f}% (unsupported or fabricated citations)")
+    print(
+        f"  * Groundedness:           {avg_groundedness * 100:6.2f}% (claims supported by retrieved text)"
+    )
+    print(
+        f"  * Context Relevance:      {avg_context_rel * 100:6.2f}% (semantic alignment of passages)"
+    )
+    print(
+        f"  * Faithfulness:           {avg_faithfulness * 100:6.2f}% (verbatim citation agreement)"
+    )
+    print(
+        f"  * Hallucination Rate:     {hallucination_rate * 100:6.2f}% (unsupported or fabricated citations)"
+    )
     print(f"  * Routing Accuracy:       {routing_acc * 100:6.2f}% (on answerable scenarios)")
-    print(f"  * Correct-Escalation Rate:{escalate_rate * 100:6.2f}% (on out-of-scope / unsafe scenarios)")
+    print(
+        f"  * Correct-Escalation Rate:{escalate_rate * 100:6.2f}% (on out-of-scope / unsafe scenarios)"
+    )
     print(f"  * Total Evaluation Time:  {total_time}s")
     print("=" * 70)
 
@@ -246,8 +284,10 @@ def main():
     if failures:
         print(f"\nPer-Scenario Failures ({len(failures)} total):")
         for f in failures:
-            print(f"  - [{f['scenario_id']}]: expected {f['expected_action']}/{f['expected_routing']}, "
-                  f"got {f['actual_status']}/{f['actual_routing']} (Reason: {f.get('escalation_reason')})")
+            print(
+                f"  - [{f['scenario_id']}]: expected {f['expected_action']}/{f['expected_routing']}, "
+                f"got {f['actual_status']}/{f['actual_routing']} (Reason: {f.get('escalation_reason')})"
+            )
     else:
         print("\nAll 20 scenarios passed perfectly with zero regressions!")
 
@@ -255,7 +295,9 @@ def main():
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     out_dir = Path("eval/out")
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_file = Path(args.out) if args.out else out_dir / f"eval_{args.prompt_version}_{timestamp}.json"
+    out_file = (
+        Path(args.out) if args.out else out_dir / f"eval_{args.prompt_version}_{timestamp}.json"
+    )
 
     out_payload = {
         "timestamp": datetime.now(timezone.utc).isoformat(),

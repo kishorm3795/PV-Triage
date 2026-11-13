@@ -47,7 +47,16 @@ def compute_context_relevance(
         # Keyword boosts for statutory / clinical relevance
         boost = 0.0
         p_lower = p_text.lower()
-        for term in ["serious", "hospitalization", "fifteen", "15", "adverse", "warning", "rash", "erythema"]:
+        for term in [
+            "serious",
+            "hospitalization",
+            "fifteen",
+            "15",
+            "adverse",
+            "warning",
+            "rash",
+            "erythema",
+        ]:
             if term in p_lower and term in query_text.lower():
                 boost += 0.15
 
@@ -75,7 +84,9 @@ def compute_groundedness(
     if not citations:
         return 0.0
 
-    retrieved_ids = {p.get("id") for p in retrieved_passages} | {p.get("clause_id") for p in retrieved_passages}
+    retrieved_ids = {p.get("id") for p in retrieved_passages} | {
+        p.get("clause_id") for p in retrieved_passages
+    }
     retrieved_texts = {p.get("id"): p.get("text", "") for p in retrieved_passages}
     for p in retrieved_passages:
         if p.get("clause_id"):
@@ -183,7 +194,7 @@ def evaluate_run(
     # Correct escalation (for cases expected to escalate)
     escalation_match = None
     if expected_action == "escalate":
-        escalation_match = (actual_status == "escalated")
+        escalation_match = actual_status == "escalated"
 
     # Overall pass determination
     if expected_action == "answer":

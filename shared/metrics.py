@@ -112,7 +112,6 @@ RATE_LIMIT_EXCEEDED_TOTAL = Counter(
 )
 
 
-
 def record_run_e2e_latency(
     redis_client,
     run_id: str,
@@ -134,9 +133,8 @@ def record_run_e2e_latency(
         finish_time_epoch = datetime.datetime.now(datetime.timezone.utc).timestamp()
 
     try:
-        queued_iso = (
-            redis_client.get(f"run:{run_id}:queued_at")
-            or redis_client.get(f"run:{run_id}:created_at")
+        queued_iso = redis_client.get(f"run:{run_id}:queued_at") or redis_client.get(
+            f"run:{run_id}:created_at"
         )
         if not queued_iso:
             return None

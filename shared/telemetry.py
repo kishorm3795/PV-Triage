@@ -18,7 +18,9 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter as GRPCSpanExporter
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+    OTLPSpanExporter as GRPCSpanExporter,
+)
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
@@ -37,6 +39,7 @@ def _get_utc_now_iso() -> str:
 def resolve_otlp_endpoint(endpoint: str) -> str:
     """Resolve endpoint, falling back from container hostname 'jaeger' to localhost on host test runs."""
     import socket
+
     parsed = urlparse(endpoint)
     host = parsed.hostname or endpoint
     try:
@@ -85,7 +88,11 @@ def init_tracer(service_name: str) -> trace.Tracer:
 
                 exporter = HTTPSpanExporter(endpoint=endpoint)
             except Exception as http_err:
-                logger.warning("Failed to initialize OTLP HTTP exporter (%s), trying gRPC: %s", endpoint, http_err)
+                logger.warning(
+                    "Failed to initialize OTLP HTTP exporter (%s), trying gRPC: %s",
+                    endpoint,
+                    http_err,
+                )
 
         if exporter is None:
             # Default to gRPC exporter
@@ -302,21 +309,25 @@ def build_and_export_run_trace(
         total_completion_tokens += ct
         total_cost_usd += cost
 
-        step_latencies.append({
-            "step": ts.get("step"),
-            "agent": ts.get("agent"),
-            "kind": ts.get("kind"),
-            "latency_ms": lat,
-        })
-        tokens_per_step.append({
-            "step": ts.get("step"),
-            "agent": ts.get("agent"),
-            "kind": ts.get("kind"),
-            "prompt_tokens": pt,
-            "completion_tokens": ct,
-            "cost_usd": cost,
-            "latency_ms": lat,
-        })
+        step_latencies.append(
+            {
+                "step": ts.get("step"),
+                "agent": ts.get("agent"),
+                "kind": ts.get("kind"),
+                "latency_ms": lat,
+            }
+        )
+        tokens_per_step.append(
+            {
+                "step": ts.get("step"),
+                "agent": ts.get("agent"),
+                "kind": ts.get("kind"),
+                "prompt_tokens": pt,
+                "completion_tokens": ct,
+                "cost_usd": cost,
+                "latency_ms": lat,
+            }
+        )
 
     # Verification outcome analysis
     verification_outcome: Dict[str, Any] = {
@@ -363,8 +374,12 @@ def build_and_export_run_trace(
         "tool_calls": tool_calls,
         "trace": trace_steps,
         "timestamps": {
-            "started_at": datetime.datetime.fromtimestamp(start_time_epoch, tz=datetime.timezone.utc).isoformat(),
-            "finished_at": datetime.datetime.fromtimestamp(finish_time_epoch, tz=datetime.timezone.utc).isoformat(),
+            "started_at": datetime.datetime.fromtimestamp(
+                start_time_epoch, tz=datetime.timezone.utc
+            ).isoformat(),
+            "finished_at": datetime.datetime.fromtimestamp(
+                finish_time_epoch, tz=datetime.timezone.utc
+            ).isoformat(),
             "duration_s": round(finish_time_epoch - start_time_epoch, 3),
         },
     }
@@ -448,7 +463,11 @@ def build_and_export_run_trace(
                 tool_name = tool.get("tool", "tool")
                 span_name = f"tool_call:{tool_num}:{tool_name}"
 
-                inp_str = json.dumps(tool.get("input", {})) if isinstance(tool.get("input"), dict) else str(tool.get("input", ""))
+                inp_str = (
+                    json.dumps(tool.get("input", {}))
+                    if isinstance(tool.get("input"), dict)
+                    else str(tool.get("input", ""))
+                )
                 tool_attrs = {
                     "step": tool_num,
                     "tool": tool_name,

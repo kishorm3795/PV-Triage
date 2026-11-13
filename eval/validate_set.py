@@ -12,8 +12,10 @@ import json
 import os
 import sys
 from pathlib import Path
+
 try:
     import jsonschema
+
     HAS_JSONSCHEMA = True
 except ImportError:
     HAS_JSONSCHEMA = False
@@ -91,19 +93,28 @@ def validate_scenarios() -> bool:
             # Check reporter_type enum
             rep_types = schema.get("$defs", {}).get("ReporterType", {}).get("enum", [])
             if report.get("reporter_type") not in rep_types:
-                print(f"[{sid}] SCHEMA ERROR: Invalid reporter_type '{report.get('reporter_type')}'", file=sys.stderr)
+                print(
+                    f"[{sid}] SCHEMA ERROR: Invalid reporter_type '{report.get('reporter_type')}'",
+                    file=sys.stderr,
+                )
                 schema_ok = False
                 all_passed = False
             # Check patient_sex enum
             sex_types = schema.get("$defs", {}).get("PatientSex", {}).get("enum", [])
             if report.get("patient_sex") not in sex_types:
-                print(f"[{sid}] SCHEMA ERROR: Invalid patient_sex '{report.get('patient_sex')}'", file=sys.stderr)
+                print(
+                    f"[{sid}] SCHEMA ERROR: Invalid patient_sex '{report.get('patient_sex')}'",
+                    file=sys.stderr,
+                )
                 schema_ok = False
                 all_passed = False
             # Check outcome enum
             outcomes = schema.get("$defs", {}).get("Outcome", {}).get("enum", [])
             if report.get("outcome") not in outcomes:
-                print(f"[{sid}] SCHEMA ERROR: Invalid outcome '{report.get('outcome')}'", file=sys.stderr)
+                print(
+                    f"[{sid}] SCHEMA ERROR: Invalid outcome '{report.get('outcome')}'",
+                    file=sys.stderr,
+                )
                 schema_ok = False
                 all_passed = False
 
@@ -111,7 +122,10 @@ def validate_scenarios() -> bool:
         clean_quote = " ".join(quote.split()).lower()
         quote_ok = clean_quote in clean_corpus
         if not quote_ok:
-            print(f"[{sid}] QUOTE ERROR: Supporting quote not found in corpus text: {quote[:60]}...", file=sys.stderr)
+            print(
+                f"[{sid}] QUOTE ERROR: Supporting quote not found in corpus text: {quote[:60]}...",
+                file=sys.stderr,
+            )
             all_passed = False
 
         status_str = "PASS" if (schema_ok and quote_ok) else "FAIL"
@@ -121,7 +135,9 @@ def validate_scenarios() -> bool:
 
     print("=" * 70)
     if all_passed:
-        print(f"RESULT: ALL {len(scenarios)} SCENARIOS FULLY VALID (Schema & Verbatim Quotes Verified)!")
+        print(
+            f"RESULT: ALL {len(scenarios)} SCENARIOS FULLY VALID (Schema & Verbatim Quotes Verified)!"
+        )
     else:
         print("RESULT: VALIDATION FAILED! Check error messages above.", file=sys.stderr)
 

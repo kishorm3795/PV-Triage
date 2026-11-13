@@ -41,6 +41,7 @@ def cleanup_environment():
 # Task 1: Retriever Protocol, MockRetriever, RealRetrieverAdapter, Env Switching
 # ========================================================================
 
+
 def test_mock_retriever_implements_protocol():
     """Verify MockRetriever satisfies the frozen Retriever protocol."""
     retriever = MockRetriever()
@@ -148,6 +149,7 @@ def test_retriever_env_factory_switching():
 # Task 2: rewrite_query(lay_text) with 3-5 terms and fallback dictionary
 # ========================================================================
 
+
 @pytest.mark.parametrize(
     "lay_text, expected_terms",
     [
@@ -190,7 +192,9 @@ def test_rewrite_query_length_boundary():
     assert 3 <= len(unknown_candidates) <= 5
 
     # Text with multiple matching keywords (peeling, blister, skin, rash, hives)
-    rich_candidates = rewrite_query("Patient had skin peeling, rash, hives, and blisters everywhere")
+    rich_candidates = rewrite_query(
+        "Patient had skin peeling, rash, hives, and blisters everywhere"
+    )
     assert 3 <= len(rich_candidates) <= 5
     assert len(rich_candidates) == len(set(rich_candidates))  # Deduplicated
 
@@ -198,6 +202,7 @@ def test_rewrite_query_length_boundary():
 # ========================================================================
 # Task 3: get_request_fields(run_id)
 # ========================================================================
+
 
 def test_get_request_fields_direct():
     """Verify request field extraction when report dict is passed."""
@@ -251,6 +256,7 @@ def test_get_request_fields_fallback_unknown():
 # ========================================================================
 # Task 4: Tool Wrapper: Audit Logging, MAX_TOOL_CALLS, and Per-call Timeout
 # ========================================================================
+
 
 def test_tool_wrapper_audit_logging():
     """Verify tool wrapper records EVERY call with complete audit fields."""
@@ -352,7 +358,9 @@ def test_sample_run_tool_log_output(capsys):
     medical_terms = tools.rewrite_query(fields["reaction_description"])
 
     # 3. search_corpus
-    search_query = f"{fields['suspect_drug']} {' '.join(medical_terms[:2])} seriousness hospitalisation"
+    search_query = (
+        f"{fields['suspect_drug']} {' '.join(medical_terms[:2])} seriousness hospitalisation"
+    )
     passages = tools.search_corpus(search_query, k=3)
 
     # 4. get_clause

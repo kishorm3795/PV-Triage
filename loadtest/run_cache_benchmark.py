@@ -12,17 +12,24 @@ import pandas as pd
 RESULTS_DIR = os.path.abspath("loadtest/results")
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
+
 def run_locust_test(tag: str, repeat_ratio: float, users: int = 20, duration: int = 25) -> dict:
     csv_prefix = os.path.join(RESULTS_DIR, f"cache_bench_{tag}")
     cmd = [
         "locust",
-        "-f", "loadtest/locustfile.py",
+        "-f",
+        "loadtest/locustfile.py",
         "--headless",
-        "-u", str(users),
-        "-r", "10",
-        "-t", f"{duration}s",
-        "--host", "http://localhost:8000",
-        "--csv", csv_prefix,
+        "-u",
+        str(users),
+        "-r",
+        "10",
+        "-t",
+        f"{duration}s",
+        "--host",
+        "http://localhost:8000",
+        "--csv",
+        csv_prefix,
         "--only-summary",
     ]
     env = os.environ.copy()
@@ -72,17 +79,26 @@ def run_locust_test(tag: str, repeat_ratio: float, users: int = 20, duration: in
         "avg_ms": avg,
         "avg_cost_usd": avg_cost,
     }
-    print(f"[{tag}] Results -> RPS: {rps:.2f}, p50: {p50:.1f}ms, p95: {p95:.1f}ms, Cost/run: ${avg_cost:.6f}")
+    print(
+        f"[{tag}] Results -> RPS: {rps:.2f}, p50: {p50:.1f}ms, p95: {p95:.1f}ms, Cost/run: ${avg_cost:.6f}"
+    )
     return res
+
 
 def main():
     # Warm up cache with sample reports
     print("Pre-warming Redis cache with templates...")
     from loadtest.locustfile import SAMPLE_REPORTS
     import urllib.request, json
+
     for i, rep in enumerate(SAMPLE_REPORTS):
         payload = {**rep, "report_id": f"rep_warmup_{i}"}
-        req = urllib.request.Request("http://localhost:8000/v1/reports", data=json.dumps(payload).encode(), headers={"Content-Type": "application/json", "X-Client-ID": "warmup"}, method="POST")
+        req = urllib.request.Request(
+            "http://localhost:8000/v1/reports",
+            data=json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json", "X-Client-ID": "warmup"},
+            method="POST",
+        )
         try:
             with urllib.request.urlopen(req) as resp:
                 pass
@@ -101,7 +117,12 @@ def main():
 
     print("\n\n================ CACHING BENCHMARK COMPARISON ================")
     summary = pd.DataFrame([uncached, mixed_50, cached_80])
-    print(summary[["tag", "repeat_ratio", "throughput_rps", "p50_ms", "p95_ms", "avg_cost_usd"]].to_string(index=False))
+    print(
+        summary[
+            ["tag", "repeat_ratio", "throughput_rps", "p50_ms", "p95_ms", "avg_cost_usd"]
+        ].to_string(index=False)
+    )
+
 
 if __name__ == "__main__":
     main()

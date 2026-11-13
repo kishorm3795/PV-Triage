@@ -179,11 +179,24 @@ class MockRetriever:
             scored_passages.append((final_score, p))
 
         # If query explicitly targets an unsupported drug outside corpus, filter out package inserts
-        known_unsupported_drugs = ["metformin", "warfarin", "aspirin", "paracetamol", "atorvastatin", "ibuprofen", "unknowndrug"]
+        known_unsupported_drugs = [
+            "metformin",
+            "warfarin",
+            "aspirin",
+            "paracetamol",
+            "atorvastatin",
+            "ibuprofen",
+            "unknowndrug",
+        ]
         for non_corpus_drug in known_unsupported_drugs:
-            if non_corpus_drug in query_lower and "lamotrigine" not in query_lower and "lamictal" not in query_lower:
+            if (
+                non_corpus_drug in query_lower
+                and "lamotrigine" not in query_lower
+                and "lamictal" not in query_lower
+            ):
                 scored_passages = [
-                    (s, p) for s, p in scored_passages
+                    (s, p)
+                    for s, p in scored_passages
                     if "package insert" not in p.source_doc.lower()
                 ]
                 break
@@ -242,6 +255,7 @@ class RealRetrieverAdapter:
 
         try:
             import importlib
+
             mod = importlib.import_module(self._retrieval_module_path)
 
             # Discover candidate class or factory
@@ -364,16 +378,19 @@ T = TypeVar("T")
 
 class ToolCallLimitExceeded(Exception):
     """Raised when MAX_TOOL_CALLS is exceeded."""
+
     pass
 
 
 class ToolTimeoutError(Exception):
     """Raised when a tool call exceeds TOOL_TIMEOUT_S."""
+
     pass
 
 
 class ToolError(Exception):
     """Generic tool execution error."""
+
     pass
 
 
@@ -395,7 +412,10 @@ def _summarize_input(func: Callable[..., Any], args: tuple, kwargs: dict) -> Dic
                 summary[k] = str(v)[:80]
         return summary
     except Exception:
-        return {"args": [str(a)[:50] for a in args], "kwargs": {k: str(v)[:50] for k, v in kwargs.items()}}
+        return {
+            "args": [str(a)[:50] for a in args],
+            "kwargs": {k: str(v)[:50] for k, v in kwargs.items()},
+        }
 
 
 def _summarize_output(result: Any) -> str:
@@ -413,7 +433,9 @@ def _summarize_output(result: Any) -> str:
             return f"Rewrote to {len(result)} terms: {result}"
         return f"List[{len(result)} items]"
     if isinstance(result, Passage):
-        return f"Passage(id='{result.id}', clause='{result.clause_id}', source='{result.source_doc}')"
+        return (
+            f"Passage(id='{result.id}', clause='{result.clause_id}', source='{result.source_doc}')"
+        )
     if isinstance(result, dict):
         keys = list(result.keys())
         return f"Dict[{len(keys)} fields: {', '.join(keys[:6])}]"
@@ -433,6 +455,7 @@ def make_tool_wrapper(
       2. Per-call timeout: Executes within timeout_s or raises ToolTimeoutError.
       3. Complete audit logging: Records EVERY call (step, tool, input, output_summary, latency_ms, ok).
     """
+
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> T:
@@ -509,12 +532,14 @@ def make_tool_wrapper(
                 )
 
         return wrapper
+
     return decorator
 
 
 # ========================================================================
 # Core Tool Implementations
 # ========================================================================
+
 
 def _search_corpus_core(
     query: str,
@@ -580,6 +605,7 @@ def _get_request_fields_core(
         # Check Redis if reachable
         try:
             import redis
+
             redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
             r = redis.from_url(redis_url, decode_responses=True, socket_connect_timeout=0.2)
             raw = r.get(f"run:{run_id}:report")
@@ -776,7 +802,11 @@ def _rewrite_query_llm(lay_text: str) -> Optional[List[str]]:
         cleaned_text = _strip_markdown_code_blocks(llm_resp.text)
         terms = json.loads(cleaned_text)
 
-        if isinstance(terms, list) and 3 <= len(terms) <= 5 and all(isinstance(t, str) for t in terms):
+        if (
+            isinstance(terms, list)
+            and 3 <= len(terms) <= 5
+            and all(isinstance(t, str) for t in terms)
+        ):
             return terms
 
     except Exception as exc:
@@ -853,6 +883,7 @@ def _rewrite_query_core(lay_text: str) -> List[str]:
 # Tool Factory & Namespace
 # ========================================================================
 
+
 class Tools:
     """Namespace holding tool functions wrapped for a specific tool_log."""
 
@@ -863,8 +894,12 @@ class Tools:
         timeout_s: Optional[float] = None,
     ) -> None:
         self._tool_log = tool_log
-        self._max_calls = max_calls if max_calls is not None else int(os.getenv("MAX_TOOL_CALLS", "20"))
-        self._timeout_s = timeout_s if timeout_s is not None else float(os.getenv("TOOL_TIMEOUT_S", "10.0"))
+        self._max_calls = (
+            max_calls if max_calls is not None else int(os.getenv("MAX_TOOL_CALLS", "20"))
+        )
+        self._timeout_s = (
+            timeout_s if timeout_s is not None else float(os.getenv("TOOL_TIMEOUT_S", "10.0"))
+        )
         self._wrap_tools()
 
     def _wrap_tools(self) -> None:
@@ -878,7 +913,10 @@ class Tools:
         )(_get_clause_core)
 
         self.get_request_fields = make_tool_wrapper(
-            "get_request_fields", self._tool_log, max_calls=self._max_calls, timeout_s=self._timeout_s
+            "get_request_fields",
+            self._tool_log,
+            max_calls=self._max_calls,
+            timeout_s=self._timeout_s,
         )(_get_request_fields_core)
 
         self.rewrite_query = make_tool_wrapper(
@@ -901,8 +939,12 @@ def wrap_tools(
     Returns:
         Tools instance with search_corpus, get_clause, get_request_fields, rewrite_query methods.
     """
-    resolved_max_calls = max_calls if max_calls is not None else int(os.getenv("MAX_TOOL_CALLS", "20"))
-    resolved_timeout_s = timeout_s if timeout_s is not None else float(os.getenv("TOOL_TIMEOUT_S", "10.0"))
+    resolved_max_calls = (
+        max_calls if max_calls is not None else int(os.getenv("MAX_TOOL_CALLS", "20"))
+    )
+    resolved_timeout_s = (
+        timeout_s if timeout_s is not None else float(os.getenv("TOOL_TIMEOUT_S", "10.0"))
+    )
     return Tools(tool_log, max_calls=resolved_max_calls, timeout_s=resolved_timeout_s)
 
 

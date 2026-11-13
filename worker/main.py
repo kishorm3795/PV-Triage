@@ -43,6 +43,7 @@ def main() -> None:
     try:
         import socket
         from urllib.parse import urlparse
+
         parsed = urlparse(raw_redis_url)
         if parsed.hostname == "redis":
             try:
@@ -84,7 +85,9 @@ def main() -> None:
         connection=conn,
         exception_handlers=[rq_exception_handler],
     )
-    logger.info("RQ Worker initialized with timeout & failure handlers. Listening on queue 'runs'...")
+    logger.info(
+        "RQ Worker initialized with timeout & failure handlers. Listening on queue 'runs'..."
+    )
     worker.work(with_scheduler=False)
 
 

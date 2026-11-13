@@ -64,6 +64,7 @@ def test_prometheus_metrics_update():
 def test_adverse_reaction_terms_count():
     """Verify all 18 listed adverse reaction terms are indexed in Chroma."""
     from pipeline.retrieval import get_chroma_client
+
     client = get_chroma_client(CHROMA_DIR)
     col = client.get_collection("pv_corpus")
     res = col.get(where={"clause_id": "adverse_reaction_terms"}, include=["documents"])

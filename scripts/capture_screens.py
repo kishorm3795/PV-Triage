@@ -29,6 +29,7 @@ VIEWPORTS = [
     ("390", "390,844"),
 ]
 
+
 def capture_all():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -43,7 +44,7 @@ def capture_all():
                 f"--screenshot={out_file}",
                 "--hide-scrollbars",
                 "--virtual-time-budget=2000",
-                url
+                url,
             ]
             print(f"Capturing {state_name} at {vp_name}px -> {out_file}...")
             res = subprocess.run(cmd, capture_output=True, text=True)
@@ -53,6 +54,7 @@ def capture_all():
             else:
                 print(f"  FAILED (exit code {res.returncode}): {res.stderr[:200]}")
             time.sleep(0.5)
+
 
 if __name__ == "__main__":
     capture_all()
