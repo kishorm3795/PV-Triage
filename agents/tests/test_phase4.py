@@ -152,17 +152,22 @@ def test_proof_injection_blocked_zero_llm_calls():
 
 def test_proof_output_filter_blocks_submitted():
     """PROOF: An output-filter test that blocks a 'submitted' phrasing."""
-    with patch("llm.client.requests.post") as mock_post:
-        mock_resp = mock_post.return_value
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {
-            "text": "Report has been submitted to national authorities.",
-            "prompt_tokens": 120,
-            "completion_tokens": 30,
-            "latency_ms": 10.0,
-            "model": "stub-llm",
-        }
+    from llm.client import _SESSION_POOL
+    
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "text": "Report has been submitted to national authorities.",
+        "prompt_tokens": 120,
+        "completion_tokens": 30,
+        "latency_ms": 10.0,
+        "model": "stub-llm",
+    }
 
+    mock_session = MagicMock()
+    mock_session.post.return_value = mock_resp
+
+    with patch.object(_SESSION_POOL, 'get_session', return_value=mock_session):
         report = {
             "report_id": "rep_proof_out_001",
             "reporter_type": "physician",

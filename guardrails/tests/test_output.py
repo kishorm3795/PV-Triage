@@ -1,6 +1,6 @@
 """guardrails/tests/test_output.py - Unit tests for output regulatory boundaries guardrail."""
 
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 import pytest
 from agents.run import reset_graph, run_graph
 from guardrails.output import (
@@ -49,20 +49,24 @@ def test_output_guardrail_allows_recommendations(compliant_recommendation):
 
 def test_run_graph_blocks_submitted_phrasing():
     """Proof: An output-filter test that blocks a 'submitted' phrasing and ends run escalated."""
+    from llm.client import _SESSION_POOL
     reset_graph()
 
     # Mock the LLM to generate prohibited 'has been submitted' phrasing
-    with patch("llm.client.requests.post") as mock_post:
-        mock_resp = mock_post.return_value
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {
-            "text": "The adverse event report has been submitted to the CDSCO regulatory portal.",
-            "prompt_tokens": 120,
-            "completion_tokens": 45,
-            "latency_ms": 20.0,
-            "model": "stub-llm",
-        }
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "text": "The adverse event report has been submitted to the CDSCO regulatory portal.",
+        "prompt_tokens": 120,
+        "completion_tokens": 45,
+        "latency_ms": 20.0,
+        "model": "stub-llm",
+    }
 
+    mock_session = MagicMock()
+    mock_session.post.return_value = mock_resp
+
+    with patch.object(_SESSION_POOL, 'get_session', return_value=mock_session):
         report = {
             "report_id": "rep_test_output_001",
             "reporter_type": "physician",

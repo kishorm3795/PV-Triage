@@ -5,6 +5,11 @@ Supports:
 2. 'gemini' provider connecting to the real Google Gemini API via official REST endpoint.
 3. Resilience layer with timeout from env (no hardcoded default in code paths), bounded retry
    with backoff and jitter, circuit breaker with state transitions, and Prometheus telemetry.
+
+Optimizations:
+- Connection pooling via requests.Session for stub and gemini providers
+- Circuit breaker state caching to reduce lock contention
+- Lazy session initialization
 """
 
 from __future__ import annotations
@@ -12,6 +17,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+import threading
 from typing import Any, Dict, Optional
 import requests
 from pydantic import BaseModel
@@ -44,6 +50,66 @@ class LLMResponse(BaseModel):
         return getattr(self, item, default)
 
 
+class _SessionPool:
+    """Thread-safe session pool for connection reuse."""
+
+    def __init__(self):
+        self._sessions: Dict[str, requests.Session] = {}
+        self._lock = threading.Lock()
+
+    def get_session(self, base_url: str) -> requests.Session:
+        """Get or create a session for the given base URL."""
+        with self._lock:
+            if base_url not in self._sessions:
+                session = requests.Session()
+                adapter = requests.adapters.HTTPAdapter(
+                    pool_connections=10,
+                    pool_maxsize=20,
+                    max_retries=0,  # We handle retries at circuit breaker level
+                )
+                session.mount("http://", adapter)
+                session.mount("https://", adapter)
+                self._sessions[base_url] = session
+            return self._sessions[base_url]
+
+    def close_all(self):
+        """Close all sessions."""
+        with self._lock:
+            for session in self._sessions.values():
+                session.close()
+            self._sessions.clear()
+
+
+# Global session pool for connection reuse
+_SESSION_POOL = _SessionPool()
+
+
+class _CircuitBreakerStateCache:
+    """Thread-safe cache for circuit breaker state to reduce lock contention."""
+
+    def __init__(self, ttl_seconds: float = 0.1):
+        self._cache: Dict[str, tuple[str, float]] = {}
+        self._lock = threading.Lock()
+        self._ttl = ttl_seconds
+
+    def get(self, key: str) -> Optional[str]:
+        with self._lock:
+            if key in self._cache:
+                state, timestamp = self._cache[key]
+                if time.time() - timestamp < self._ttl:
+                    return state
+                del self._cache[key]
+        return None
+
+    def set(self, key: str, state: str):
+        with self._lock:
+            self._cache[key] = (state, time.time())
+
+
+# Global circuit breaker state cache
+_BREAKER_STATE_CACHE = _CircuitBreakerStateCache(ttl_seconds=0.1)
+
+
 class LLMClient:
     """Unified LLM client dispatching to configured provider."""
 
@@ -56,6 +122,16 @@ class LLMClient:
         self.provider = (provider or os.getenv("LLM_PROVIDER", "stub")).lower().strip()
         self._timeout = timeout
         self.circuit_breaker = circuit_breaker or get_circuit_breaker()
+        self._session: Optional[requests.Session] = None
+
+    def _get_stub_session(self) -> requests.Session:
+        """Get or create pooled session for stub LLM."""
+        base_url = os.getenv("LLM_BASE_URL", "http://stub-llm:8001").rstrip("/")
+        return _SESSION_POOL.get_session(base_url)
+
+    def _get_gemini_session(self) -> requests.Session:
+        """Get or create pooled session for Gemini API."""
+        return _SESSION_POOL.get_session("https://generativelanguage.googleapis.com")
 
     def generate(
         self,
@@ -105,7 +181,7 @@ class LLMClient:
         timeout: float = 30.0,
         **kwargs: Any,
     ) -> LLMResponse:
-        """Call the deterministic Stub LLM service over HTTP."""
+        """Call the deterministic Stub LLM service over HTTP using connection pooling."""
         stub_fail = os.getenv("STUB_FAIL", "false").lower() == "true"
         if stub_fail:
             resp = requests.Response()
@@ -128,9 +204,10 @@ class LLMClient:
             if k not in payload:
                 payload[k] = v
 
+        session = self._get_stub_session()
         start_time = time.perf_counter()
         try:
-            resp = requests.post(endpoint, json=payload, timeout=timeout)
+            resp = session.post(endpoint, json=payload, timeout=timeout)
             resp.raise_for_status()
             data = resp.json()
         except requests.RequestException as exc:
@@ -138,7 +215,8 @@ class LLMClient:
             if "stub-llm" in base_url and os.getenv("LLM_BASE_URL") is None:
                 try:
                     fallback_endpoint = "http://localhost:8001/generate"
-                    resp = requests.post(fallback_endpoint, json=payload, timeout=timeout)
+                    fallback_session = _SESSION_POOL.get_session("http://localhost:8001")
+                    resp = fallback_session.post(fallback_endpoint, json=payload, timeout=timeout)
                     resp.raise_for_status()
                     data = resp.json()
                 except requests.RequestException:
@@ -184,7 +262,7 @@ class LLMClient:
         timeout: float = 30.0,
         **kwargs: Any,
     ) -> LLMResponse:
-        """Call the Google Gemini API using env-configured credentials and model."""
+        """Call the Google Gemini API using env-configured credentials and model with connection pooling."""
         api_key = os.getenv("LLM_API_KEY", "").strip()
         if not api_key:
             raise ValueError("LLM_API_KEY environment variable is required for Gemini provider.")
@@ -208,9 +286,10 @@ class LLMClient:
         if gen_config:
             body["generationConfig"] = gen_config
 
+        session = self._get_gemini_session()
         start_time = time.perf_counter()
         try:
-            resp = requests.post(
+            resp = session.post(
                 url,
                 json=body,
                 headers={"Content-Type": "application/json"},
@@ -242,3 +321,14 @@ class LLMClient:
             latency_ms=elapsed_ms,
             model=model,
         )
+
+    def close(self):
+        """Close any open sessions. Call on shutdown."""
+        if self._session:
+            self._session.close()
+            self._session = None
+
+
+def close_all_sessions():
+    """Close all pooled sessions. Call on application shutdown."""
+    _SESSION_POOL.close_all()
