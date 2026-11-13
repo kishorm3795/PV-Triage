@@ -185,7 +185,9 @@ def test_run_graph_unmatchable_reaction_escalates():
     result = run_graph(report, "run_unmatchable_001")
     assert isinstance(result, RunResult)
     assert result.status == "escalated"
-    assert "cannot be matched to the package insert with confidence" in (result.escalation_reason or "")
+    assert "cannot be matched to the package insert with confidence" in (
+        result.escalation_reason or ""
+    )
 
 
 def test_run_graph_assessor_crash_fails():
@@ -201,7 +203,9 @@ def test_run_graph_assessor_crash_fails():
         result = run_graph(report, "run_crash_001")
         assert isinstance(result, RunResult)
         assert result.status == "failed"
-        assert "Assessor crashed" in (result.escalation_reason or "") or "Assessor internal fault" in (result.escalation_reason or "")
+        assert "Assessor crashed" in (
+            result.escalation_reason or ""
+        ) or "Assessor internal fault" in (result.escalation_reason or "")
 
 
 def test_run_graph_verifier_crash_escalates():

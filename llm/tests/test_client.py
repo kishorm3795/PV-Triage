@@ -107,13 +107,7 @@ def test_gemini_provider_success(monkeypatch):
     mock_resp = MagicMock()
     mock_resp.status_code = 200
     mock_resp.json.return_value = {
-        "candidates": [
-            {
-                "content": {
-                    "parts": [{"text": "Gemini generated triage assessment"}]
-                }
-            }
-        ],
+        "candidates": [{"content": {"parts": [{"text": "Gemini generated triage assessment"}]}}],
         "usageMetadata": {
             "promptTokenCount": 85,
             "candidatesTokenCount": 35,

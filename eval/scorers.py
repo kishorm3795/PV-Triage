@@ -33,6 +33,7 @@ class EvalScorer:
         if self._retriever is None:
             try:
                 from pipeline.retrieval import create_retriever
+
                 self._retriever = create_retriever()
             except Exception as exc:
                 logger.warning("Failed to load real retriever: %s", exc)
@@ -98,10 +99,7 @@ class EvalScorer:
                 "is_listed": result.expectedness.is_listed,
                 "matched_term": result.expectedness.matched_term,
             },
-            "citations": [
-                {"passage_id": c.passage_id, "quote": c.quote}
-                for c in result.citations
-            ],
+            "citations": [{"passage_id": c.passage_id, "quote": c.quote} for c in result.citations],
             "escalation_reason": result.escalation_reason,
         }
 

@@ -34,7 +34,7 @@ class TestBatchRunner:
         scenarios_file = tmp_path / "scenarios.jsonl"
         scenarios_file.write_text(
             '{"report_id": "rep_001", "reaction_description": "Valid"}\n'
-            'not valid json\n'
+            "not valid json\n"
             '{"report_id": "rep_002", "reaction_description": "Also valid"}\n'
         )
 
@@ -75,11 +75,20 @@ class TestBatchRunner:
 
         mock_run_graph.return_value = mock_result
 
-        mock_score = {"groundedness": 1.0, "citation_resolve": True, "claim_support": 1.0, "quote_verbatim": True}
+        mock_score = {
+            "groundedness": 1.0,
+            "citation_resolve": True,
+            "claim_support": 1.0,
+            "quote_verbatim": True,
+        }
         mock_scorer.return_value.score.return_value = mock_score
 
         scenarios = [
-            {"report_id": "rep_001", "reaction_description": "Test", "expected_routing": "expedited"},
+            {
+                "report_id": "rep_001",
+                "reaction_description": "Test",
+                "expected_routing": "expedited",
+            },
         ]
 
         results = run_batch(scenarios, "v1", "mock", "local")
@@ -114,7 +123,12 @@ class TestBatchRunner:
 
         mock_run_graph.return_value = mock_result
 
-        mock_score = {"groundedness": 0.5, "citation_resolve": False, "claim_support": 0.5, "quote_verbatim": False}
+        mock_score = {
+            "groundedness": 0.5,
+            "citation_resolve": False,
+            "claim_support": 0.5,
+            "quote_verbatim": False,
+        }
         mock_scorer.return_value.score.return_value = mock_score
 
         scenarios = [{"report_id": "rep_001", "reaction_description": "Test"}]
@@ -126,7 +140,9 @@ class TestBatchRunner:
     @patch("agents.batch.run_graph")
     @patch("agents.batch.get_scorer")
     @patch("agents.batch.get_default_retriever")
-    def test_run_batch_verification_skipped_no_verifier(self, mock_retriever, mock_scorer, mock_run_graph):
+    def test_run_batch_verification_skipped_no_verifier(
+        self, mock_retriever, mock_scorer, mock_run_graph
+    ):
         """Test batch run with no verifier step (verification_passed is None)."""
         from agents.batch import run_batch
 
@@ -146,7 +162,12 @@ class TestBatchRunner:
 
         mock_run_graph.return_value = mock_result
 
-        mock_score = {"groundedness": 1.0, "citation_resolve": True, "claim_support": 1.0, "quote_verbatim": True}
+        mock_score = {
+            "groundedness": 1.0,
+            "citation_resolve": True,
+            "claim_support": 1.0,
+            "quote_verbatim": True,
+        }
         mock_scorer.return_value.score.return_value = mock_score
 
         scenarios = [{"report_id": "rep_001", "reaction_description": "Test"}]
@@ -203,6 +224,7 @@ class TestBatchRunner:
         assert filepath.name.endswith(".json")
 
         import json
+
         with open(filepath) as f:
             data = json.load(f)
         assert data["metadata"]["prompt_version"] == "v1"

@@ -12,10 +12,17 @@ from typing import Any, Dict, List, Optional
 try:
     from prometheus_client import Gauge, CollectorRegistry
 except ImportError:
+
     class DummyGauge:
-        def __init__(self, *args, **kwargs): pass
-        def labels(self, *args, **kwargs): return self
-        def set(self, *args, **kwargs): pass
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def labels(self, *args, **kwargs):
+            return self
+
+        def set(self, *args, **kwargs):
+            pass
+
     Gauge = DummyGauge
     CollectorRegistry = None
 
@@ -26,33 +33,28 @@ CHROMA_DIR = os.getenv("CHROMA_DIR", "./data/chroma")
 INDEX_BUILD_TIMESTAMP = Gauge(
     "pv_index_build_timestamp_seconds",
     "Unix timestamp of last successful index build",
-    ["index_name"]
+    ["index_name"],
 )
 INDEX_SOURCE_DOC_VERSION = Gauge(
     "pv_index_source_doc_version",
     "Version/hash of source document in index",
-    ["index_name", "source_doc"]
+    ["index_name", "source_doc"],
 )
 INDEX_CHUNK_COUNT = Gauge(
-    "pv_index_chunk_count",
-    "Total number of chunks in the index",
-    ["index_name"]
+    "pv_index_chunk_count", "Total number of chunks in the index", ["index_name"]
 )
 INDEX_CHUNKS_PER_SECOND = Gauge(
-    "pv_index_chunks_per_second",
-    "Chunks processed per second during last build",
-    ["index_name"]
+    "pv_index_chunks_per_second", "Chunks processed per second during last build", ["index_name"]
 )
 INDEX_EMBED_MODEL = Gauge(
-    "pv_index_embed_model",
-    "Embedding model used (encoded as hash)",
-    ["index_name", "model_name"]
+    "pv_index_embed_model", "Embedding model used (encoded as hash)", ["index_name", "model_name"]
 )
 
 
 @dataclass
 class SourceDocMeta:
     """Metadata for a source document."""
+
     name: str
     path: str
     size_bytes: int
@@ -64,6 +66,7 @@ class SourceDocMeta:
 @dataclass
 class IndexMeta:
     """Metadata for the entire index."""
+
     build_time: float
     embed_model: str
     total_chunks: int
@@ -81,6 +84,7 @@ class IndexMeta:
         build_time = data.get("build_time")
         if isinstance(build_time, str):
             from datetime import datetime
+
             build_time = datetime.fromisoformat(build_time.replace("Z", "+00:00")).timestamp()
 
         # Handle source_docs (new schema) or source_doc_versions (old schema)
@@ -92,13 +96,15 @@ class IndexMeta:
             for name, version in data.get("source_doc_versions", {}).items():
                 # Extract hash from "sha256:xxx" format
                 content_hash = version.split(":")[-1] if ":" in version else version
-                source_docs.append(SourceDocMeta(
-                    name=name,
-                    path=f"corpus/{name}",
-                    size_bytes=0,
-                    modified_time=build_time or time.time(),
-                    content_hash=content_hash,
-                ))
+                source_docs.append(
+                    SourceDocMeta(
+                        name=name,
+                        path=f"corpus/{name}",
+                        size_bytes=0,
+                        modified_time=build_time or time.time(),
+                        content_hash=content_hash,
+                    )
+                )
 
         return cls(
             build_time=build_time or time.time(),
@@ -113,6 +119,7 @@ class IndexMeta:
 def compute_file_hash(filepath: str) -> str:
     """Compute SHA-256 hash of file content."""
     import hashlib
+
     hasher = hashlib.sha256()
     with open(filepath, "rb") as f:
         for chunk in iter(lambda: f.read(8192), b""):
@@ -150,7 +157,9 @@ def save_index_meta(meta: IndexMeta) -> None:
         json.dump(meta.to_dict(), f, indent=2)
 
 
-def update_prometheus_metrics(meta: IndexMeta, registry: Optional[CollectorRegistry] = None) -> None:
+def update_prometheus_metrics(
+    meta: IndexMeta, registry: Optional[CollectorRegistry] = None
+) -> None:
     """Update Prometheus gauges with index metadata."""
     index_name = Path(meta.index_dir).name
 
@@ -160,10 +169,9 @@ def update_prometheus_metrics(meta: IndexMeta, registry: Optional[CollectorRegis
     INDEX_EMBED_MODEL.labels(index_name=index_name, model_name=meta.embed_model).set(1)
 
     for src in meta.source_docs:
-        INDEX_SOURCE_DOC_VERSION.labels(
-            index_name=index_name,
-            source_doc=src.name
-        ).set(float(src.modified_time))
+        INDEX_SOURCE_DOC_VERSION.labels(index_name=index_name, source_doc=src.name).set(
+            float(src.modified_time)
+        )
 
 
 def get_index_freshness(index_dir: str) -> Dict[str, Any]:

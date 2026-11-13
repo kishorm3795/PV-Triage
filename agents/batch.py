@@ -166,9 +166,7 @@ def run_batch(
             "escalation_reason": result.escalation_reason,
             "steps": len(result.trace),
             "tool_calls": len(result.tool_calls),
-            "total_tokens": sum(
-                ts.prompt_tokens + ts.completion_tokens for ts in result.trace
-            ),
+            "total_tokens": sum(ts.prompt_tokens + ts.completion_tokens for ts in result.trace),
             "prompt_tokens": sum(ts.prompt_tokens for ts in result.trace),
             "completion_tokens": sum(ts.completion_tokens for ts in result.trace),
             "cost_usd": sum(ts.cost_usd for ts in result.trace),
@@ -185,34 +183,24 @@ def run_batch(
 
 def print_summary(results: List[Dict[str, Any]], prompt_version: str) -> None:
     """Print a summary table of batch results."""
-    print(f"\n{'='*100}")
+    print(f"\n{'=' * 100}")
     print(f"BATCH EVALUATION SUMMARY — PROMPT VERSION: {prompt_version}")
-    print(f"{'='*100}")
+    print(f"{'=' * 100}")
 
     total = len(results)
     completed = sum(1 for r in results if r["status"] == "completed")
     escalated = sum(1 for r in results if r["status"] == "escalated")
     failed = sum(1 for r in results if r["status"] == "failed")
 
-    routing_correct_count = sum(
-        1 for r in results if r.get("routing_correct") is True
-    )
+    routing_correct_count = sum(1 for r in results if r.get("routing_correct") is True)
     routing_total = sum(1 for r in results if r.get("routing_correct") is not None)
 
-    citations_resolved_count = sum(
-        1 for r in results if r.get("citations_resolved") is True
-    )
-    citations_total = sum(
-        1 for r in results if r.get("citations_resolved") is not None
-    )
+    citations_resolved_count = sum(1 for r in results if r.get("citations_resolved") is True)
+    citations_total = sum(1 for r in results if r.get("citations_resolved") is not None)
 
-    avg_tokens = (
-        sum(r.get("total_tokens", 0) for r in results) / total if total > 0 else 0
-    )
+    avg_tokens = sum(r.get("total_tokens", 0) for r in results) / total if total > 0 else 0
     avg_cost = sum(r.get("cost_usd", 0) for r in results) / total if total > 0 else 0
-    avg_elapsed = (
-        sum(r.get("elapsed_ms", 0) for r in results) / total if total > 0 else 0
-    )
+    avg_elapsed = sum(r.get("elapsed_ms", 0) for r in results) / total if total > 0 else 0
 
     print(f"Total Scenarios:     {total}")
     print(f"  Completed:         {completed}")
@@ -221,11 +209,11 @@ def print_summary(results: List[Dict[str, Any]], prompt_version: str) -> None:
     print(f"")
     if routing_total > 0:
         print(
-            f"Routing Correct:     {routing_correct_count}/{routing_total} ({routing_correct_count/routing_total*100:.1f}%)"
+            f"Routing Correct:     {routing_correct_count}/{routing_total} ({routing_correct_count / routing_total * 100:.1f}%)"
         )
     if citations_total > 0:
         print(
-            f"Citations Resolved:  {citations_resolved_count}/{citations_total} ({citations_resolved_count/citations_total*100:.1f}%)"
+            f"Citations Resolved:  {citations_resolved_count}/{citations_total} ({citations_resolved_count / citations_total * 100:.1f}%)"
         )
     print(f"Avg Tokens/Run:      {avg_tokens:.0f}")
     print(f"Avg Cost/Run:        ${avg_cost:.6f}")
@@ -240,16 +228,22 @@ def print_summary(results: List[Dict[str, Any]], prompt_version: str) -> None:
     for idx, r in enumerate(results):
         status = r["status"]
         routing = r["routing"] or "N/A"
-        correct = "✓" if r.get("routing_correct") else ("✗" if r.get("routing_correct") is False else "?")
-        cites = "✓" if r.get("citations_resolved") else ("✗" if r.get("citations_resolved") is False else "?")
+        correct = (
+            "✓" if r.get("routing_correct") else ("✗" if r.get("routing_correct") is False else "?")
+        )
+        cites = (
+            "✓"
+            if r.get("citations_resolved")
+            else ("✗" if r.get("citations_resolved") is False else "?")
+        )
         cost = f"${r.get('cost_usd', 0):.6f}"
         elapsed = f"{r.get('elapsed_ms', 0):.0f}ms"
         scenario_id = r.get("scenario_id", f"sc_{idx}")[:30]
         print(
-            f"{idx+1:>3}  {scenario_id:<30}  {status:<10}  {routing:<12}  {correct:<7}  {cites:<7}  {cost:<10}  {elapsed:<8}"
+            f"{idx + 1:>3}  {scenario_id:<30}  {status:<10}  {routing:<12}  {correct:<7}  {cites:<7}  {cost:<10}  {elapsed:<8}"
         )
 
-    print(f"{'='*100}\n")
+    print(f"{'=' * 100}\n")
 
 
 def save_results(

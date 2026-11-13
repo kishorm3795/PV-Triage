@@ -25,6 +25,7 @@ from typing import Dict, List, Optional, Set
 try:
     import chromadb
     from chromadb.config import Settings
+
     CHROMA_AVAILABLE = True
 except ImportError:
     chromadb = None
@@ -32,17 +33,23 @@ except ImportError:
     CHROMA_AVAILABLE = False
 
 from pipeline.chunker import chunk_document, Chunk
+
 try:
     from pipeline.embedder import Embedder
+
     EMBEDDER_AVAILABLE = True
 except ImportError:
+
     class Embedder:
         def __init__(self, model_name=None):
             self.model_name = model_name or "all-MiniLM-L6-v2"
             self.dimension = 384
+
         def embed(self, texts):
             import numpy as np
+
             return np.zeros((len(texts), 384))
+
     EMBEDDER_AVAILABLE = False
 from pipeline.meta import (
     IndexMeta,
@@ -68,6 +75,7 @@ COLLECTION_NAME = "pv_corpus"
 def get_chroma_client():
     """Get ChromaDB client."""
     from pipeline.retrieval import get_chroma_client as _get_client
+
     return _get_client(CHROMA_DIR)
 
 
@@ -242,8 +250,12 @@ def ingest_all(
             continue
 
         new_chunks, updated_chunks, src_meta = ingest_document(
-            doc_name, doc_path, collection, embedder,
-            force=force, reembed=bool(reembed_doc),
+            doc_name,
+            doc_path,
+            collection,
+            embedder,
+            force=force,
+            reembed=bool(reembed_doc),
             existing_hashes=existing_hashes,
         )
         all_new_chunks += len(new_chunks)
@@ -260,7 +272,11 @@ def ingest_all(
                     source_docs_meta.append(src)
 
     elapsed = time.time() - start_time
-    total_chunks = collection.count() if collection is not None else sum(s.chunk_count for s in source_docs_meta)
+    total_chunks = (
+        collection.count()
+        if collection is not None
+        else sum(s.chunk_count for s in source_docs_meta)
+    )
     chunks_per_sec = total_chunks / elapsed if elapsed > 0 else 0
 
     print(f"\nIngestion complete in {elapsed:.2f}s")
@@ -290,6 +306,7 @@ def ingest_all(
 
 def main():
     import sys
+
     # Handle "python -m pipeline ingest" - sys.argv will be ['__main__.py', 'ingest', ...]
     # We need to skip the 'ingest' argument if present
     argv = sys.argv[1:]
@@ -304,7 +321,7 @@ Examples:
   python -m pipeline ingest                    # Normal incremental ingest
   python -m pipeline ingest --force            # Force re-process all documents
   python -m pipeline ingest --reembed lamotrigine_package_insert.pdf  # Re-embed one doc
-        """
+        """,
     )
     parser.add_argument(
         "--force",
@@ -327,6 +344,7 @@ Examples:
     except Exception as e:
         print(f"Error: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 

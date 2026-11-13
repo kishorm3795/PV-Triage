@@ -144,7 +144,10 @@ def test_proof_injection_blocked_zero_llm_calls():
     assert len(result.tool_calls) == 0
 
     # 4. Guardrail trace check
-    assert any(ts.agent == "guardrail" and ts.detail["guardrail"]["result"] == "block" for ts in result.trace)
+    assert any(
+        ts.agent == "guardrail" and ts.detail["guardrail"]["result"] == "block"
+        for ts in result.trace
+    )
 
 
 def test_proof_output_filter_blocks_submitted():

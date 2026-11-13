@@ -124,8 +124,12 @@ def main() -> None:
         logger.warning("Attempted to load pipeline.ingest but encountered: %s", exc)
 
     # Fallback to platform-level scaffolding
-    corpus_dir = Path(os.getenv("CORPUS_DIR", "/app/corpus" if Path("/app/corpus").is_dir() else "corpus"))
-    chroma_dir = Path(os.getenv("CHROMA_DIR", "/app/data/chroma" if Path("/app").is_dir() else "./data/chroma"))
+    corpus_dir = Path(
+        os.getenv("CORPUS_DIR", "/app/corpus" if Path("/app/corpus").is_dir() else "corpus")
+    )
+    chroma_dir = Path(
+        os.getenv("CHROMA_DIR", "/app/data/chroma" if Path("/app").is_dir() else "./data/chroma")
+    )
 
     run_scaffold_ingest(corpus_dir, chroma_dir, force=args.force)
 

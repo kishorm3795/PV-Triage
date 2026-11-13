@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional
 try:
     import chromadb
     from chromadb.config import Settings
+
     CHROMA_AVAILABLE = True
 except ImportError:
     chromadb = None
@@ -30,6 +31,7 @@ except ImportError:
 
 try:
     from pipeline.embedder import Embedder
+
     EMBEDDER_AVAILABLE = True
 except ImportError:
     Embedder = None
@@ -85,7 +87,17 @@ def _make_passage(
     score: Optional[float] = None,
 ) -> Passage:
     cid = clause_id or None
-    pid = cid if cid and ("-" in cid or cid.startswith("ndct") or cid.startswith("ipc") or cid.startswith("lamotrigine")) else chunk_id
+    pid = (
+        cid
+        if cid
+        and (
+            "-" in cid
+            or cid.startswith("ndct")
+            or cid.startswith("ipc")
+            or cid.startswith("lamotrigine")
+        )
+        else chunk_id
+    )
 
     full_text = text
     if cid in CANONICAL_CLAUSE_TEXTS and CANONICAL_CLAUSE_TEXTS[cid] not in full_text:
@@ -111,6 +123,7 @@ def get_chroma_client(chroma_dir: Optional[str] = None):
     target_dir = chroma_dir or CHROMA_DIR
     Path(target_dir).mkdir(parents=True, exist_ok=True)
     return chromadb.PersistentClient(path=target_dir, settings=CHROMA_SETTINGS)
+
 
 # Known canonical clause aliases across team contracts and reference cases
 CLAUSE_ALIASES: Dict[str, List[str]] = {
@@ -180,7 +193,6 @@ def _load_synonyms() -> Dict[str, List[str]]:
     return {}
 
 
-
 import math
 from pipeline.chunker import chunk_document, Chunk
 
@@ -189,6 +201,7 @@ CORPUS_DOCS = {
     "lamotrigine_package_insert.pdf": "corpus/lamotrigine_package_insert.pdf",
     "ndct_rules_2019.pdf": "corpus/ndct_rules_2019.pdf",
 }
+
 
 class BM25CorpusIndex:
     """In-memory BM25 index over all extracted corpus chunks for hybrid keyword search."""
@@ -257,7 +270,9 @@ class BM25CorpusIndex:
                 if tf > 0:
                     doc_freq = self.df.get(w, 0)
                     idf = math.log((self.N - doc_freq + 0.5) / (doc_freq + 0.5) + 1.0)
-                    term_score = idf * (tf * 2.2) / (tf + 1.2 * (0.25 + 0.75 * (dl / max(1.0, self.avg_dl))))
+                    term_score = (
+                        idf * (tf * 2.2) / (tf + 1.2 * (0.25 + 0.75 * (dl / max(1.0, self.avg_dl))))
+                    )
                     score += term_score
 
             chunk = self.chunks[idx]
@@ -268,7 +283,21 @@ class BM25CorpusIndex:
                 score *= 0.3
 
             # Exact phrase matches in chunk text give strong relevance boost
-            for phrase in ["hospitalization", "inpatient hospitalisation", "15 calendar days", "fifteen calendar days", "fifteen days", "serious unexpected", "toxic epidermal necrolysis", "stevens-johnson", "boxed warning", "serious skin rashes", "undesirable effects", "reporting time lines", "expectedness"]:
+            for phrase in [
+                "hospitalization",
+                "inpatient hospitalisation",
+                "15 calendar days",
+                "fifteen calendar days",
+                "fifteen days",
+                "serious unexpected",
+                "toxic epidermal necrolysis",
+                "stevens-johnson",
+                "boxed warning",
+                "serious skin rashes",
+                "undesirable effects",
+                "reporting time lines",
+                "expectedness",
+            ]:
                 if phrase in query.lower() and phrase in chunk_text_lower:
                     score += 45.0
 
@@ -312,6 +341,7 @@ class BM25CorpusIndex:
 
 
 _BM25_INDEX: Optional[BM25CorpusIndex] = None
+
 
 def get_bm25_index() -> BM25CorpusIndex:
     global _BM25_INDEX
@@ -414,11 +444,19 @@ class ChromaRetriever:
         for bm_score, chunk in bm25_results:
             norm_score = round(bm_score / max(1.0, max_bm25_score), 4)
             if chunk.id not in retrieved_ids:
-                p = _make_passage(chunk.id, chunk.text, chunk.source_doc, chunk.page, chunk.clause_id, chunk.section, score=norm_score)
+                p = _make_passage(
+                    chunk.id,
+                    chunk.text,
+                    chunk.source_doc,
+                    chunk.page,
+                    chunk.clause_id,
+                    chunk.section,
+                    score=norm_score,
+                )
                 passages.append(p)
                 retrieved_ids.add(p.id)
 
-        passages.sort(key=lambda p: (p.score or 0.0), reverse=True)
+        passages.sort(key=lambda p: p.score or 0.0, reverse=True)
         return passages[:k]
 
     def get_clause(self, clause_id: str) -> Optional[Passage]:
@@ -499,7 +537,9 @@ class ChromaRetriever:
         chunk = self._bm25.get_clause(clause_id)
         if chunk is not None:
             p = chunk.to_passage(score=1.0)
-            return _make_passage(p.id, p.text, p.source_doc, p.page, p.clause_id or clause_id, p.section, score=1.0)
+            return _make_passage(
+                p.id, p.text, p.source_doc, p.page, p.clause_id or clause_id, p.section, score=1.0
+            )
         return None
 
 

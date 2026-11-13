@@ -77,14 +77,16 @@ class BatchOutputRunSource:
                 for r in data.get("results", []):
                     if r.get("status") != "completed":
                         continue
-                    runs.append({
-                        "run_id": r["run_id"],
-                        "timestamp": file_timestamp or datetime.utcnow().isoformat(),
-                        "score": r.get("score", {}),
-                        "prompt_version": r.get("prompt_versions", {}).get("assessor"),
-                        "routing": r.get("routing"),
-                        "status": r.get("status"),
-                    })
+                    runs.append(
+                        {
+                            "run_id": r["run_id"],
+                            "timestamp": file_timestamp or datetime.utcnow().isoformat(),
+                            "score": r.get("score", {}),
+                            "prompt_version": r.get("prompt_versions", {}).get("assessor"),
+                            "routing": r.get("routing"),
+                            "status": r.get("status"),
+                        }
+                    )
             except Exception as exc:
                 logger.warning("Failed to read %s: %s", json_file, exc)
         return runs
@@ -223,6 +225,7 @@ def run_sampling_once(
             return 0
 
         import hashlib
+
         threshold = int(sample_rate * 100)
         inserted = 0
 
@@ -248,8 +251,12 @@ def run_sampling_once(
 
             if db.insert_sample(sample):
                 inserted += 1
-                logger.info("Sampled run %s: groundedness=%.2f, cites_resolved=%s",
-                           run["run_id"], score.get("groundedness", 0), score.get("citation_resolve"))
+                logger.info(
+                    "Sampled run %s: groundedness=%.2f, cites_resolved=%s",
+                    run["run_id"],
+                    score.get("groundedness", 0),
+                    score.get("citation_resolve"),
+                )
 
         logger.info("Sampling iteration complete: %d new samples inserted", inserted)
         return inserted
@@ -265,6 +272,7 @@ def run_sampling_once(
         return 0
 
     import hashlib
+
     threshold = int(sample_rate * 100)
     inserted = 0
 
@@ -290,8 +298,12 @@ def run_sampling_once(
 
         if db.insert_sample(sample):
             inserted += 1
-            logger.info("Sampled run %s: groundedness=%.2f, cites_resolved=%s",
-                       run.run_id, score.get("groundedness", 0), score.get("citation_resolve"))
+            logger.info(
+                "Sampled run %s: groundedness=%.2f, cites_resolved=%s",
+                run.run_id,
+                score.get("groundedness", 0),
+                score.get("citation_resolve"),
+            )
 
     logger.info("Sampling iteration complete: %d new samples inserted", inserted)
     return inserted
@@ -304,21 +316,29 @@ def print_scores_table(db: SamplingDB) -> None:
         print("No samples in database")
         return
 
-    print(f"\n{'='*120}")
+    print(f"\n{'=' * 120}")
     print(f"LIVE SAMPLING SCORES — {len(samples)} samples")
-    print(f"{'='*120}")
-    print(f"{'Run ID':<35} {'Time':<20} {'Grounded':>8} {'Cites OK':>8} {'Claim Supp':>10} {'Quote VB':>8} {'Scorer':<8} {'Prompt':<8} {'Routing':<12}")
+    print(f"{'=' * 120}")
+    print(
+        f"{'Run ID':<35} {'Time':<20} {'Grounded':>8} {'Cites OK':>8} {'Claim Supp':>10} {'Quote VB':>8} {'Scorer':<8} {'Prompt':<8} {'Routing':<12}"
+    )
     print("-" * 120)
     for s in samples:
         ts = s["timestamp"][:19].replace("T", " ")
-        grounded = f"{s['groundedness_score']:.2f}" if s["groundedness_score"] is not None else "N/A"
-        cites = "✓" if s["citation_resolve"] else ("✗" if s["citation_resolve"] is not None else "?")
+        grounded = (
+            f"{s['groundedness_score']:.2f}" if s["groundedness_score"] is not None else "N/A"
+        )
+        cites = (
+            "✓" if s["citation_resolve"] else ("✗" if s["citation_resolve"] is not None else "?")
+        )
         claim = f"{s['claim_support_score']:.2f}" if s["claim_support_score"] is not None else "N/A"
         quote = "✓" if s["quote_verbatim"] else ("✗" if s["quote_verbatim"] is not None else "?")
         prompt = s["prompt_version"] or "N/A"
         routing = s["routing"] or "N/A"
-        print(f"{s['run_id']:<35} {ts:<20} {grounded:>8} {cites:>8} {claim:>10} {quote:>8} {s['scorer']:<8} {prompt:<8} {routing:<12}")
-    print(f"{'='*120}\n")
+        print(
+            f"{s['run_id']:<35} {ts:<20} {grounded:>8} {cites:>8} {claim:>10} {quote:>8} {s['scorer']:<8} {prompt:<8} {routing:<12}"
+        )
+    print(f"{'=' * 120}\n")
 
 
 def export_timeseries_csv(db: SamplingDB, out_path: str) -> None:
@@ -332,9 +352,18 @@ def export_timeseries_csv(db: SamplingDB, out_path: str) -> None:
     out_file.parent.mkdir(parents=True, exist_ok=True)
 
     import csv
+
     fieldnames = [
-        "run_id", "timestamp", "groundedness_score", "citation_resolve",
-        "claim_support_score", "quote_verbatim", "scorer", "prompt_version", "routing", "status"
+        "run_id",
+        "timestamp",
+        "groundedness_score",
+        "citation_resolve",
+        "claim_support_score",
+        "quote_verbatim",
+        "scorer",
+        "prompt_version",
+        "routing",
+        "status",
     ]
     with open(out_file, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
@@ -363,13 +392,31 @@ def get_run_source() -> RunSource:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Live sampling for PV-Triage quality monitoring")
     parser.add_argument("--once", action="store_true", help="Run one sampling iteration and exit")
-    parser.add_argument("--daemon", action="store_true", help="Run as background daemon (polls every 60s)")
-    parser.add_argument("--print", action="store_true", dest="print_table", help="Print scores table")
+    parser.add_argument(
+        "--daemon", action="store_true", help="Run as background daemon (polls every 60s)"
+    )
+    parser.add_argument(
+        "--print", action="store_true", dest="print_table", help="Print scores table"
+    )
     parser.add_argument("--export-csv", action="store_true", help="Export time series CSV")
     parser.add_argument("--out", help="Output CSV path (for --export-csv)")
-    parser.add_argument("--db", default=os.getenv("SAMPLE_DB", "agents/out/sampling.db"), help="SQLite database path")
-    parser.add_argument("--rate", type=float, default=float(os.getenv("SAMPLE_RATE", "0.1")), help="Sampling rate (0-1)")
-    parser.add_argument("--scorer", choices=["local", "eval"], default=os.getenv("SCORER", "local"), help="Scorer mode")
+    parser.add_argument(
+        "--db",
+        default=os.getenv("SAMPLE_DB", "agents/out/sampling.db"),
+        help="SQLite database path",
+    )
+    parser.add_argument(
+        "--rate",
+        type=float,
+        default=float(os.getenv("SAMPLE_RATE", "0.1")),
+        help="Sampling rate (0-1)",
+    )
+    parser.add_argument(
+        "--scorer",
+        choices=["local", "eval"],
+        default=os.getenv("SCORER", "local"),
+        help="Scorer mode",
+    )
     parser.add_argument("--interval", type=int, default=60, help="Daemon poll interval (seconds)")
 
     args = parser.parse_args()
@@ -392,7 +439,9 @@ def main() -> int:
         return 0
 
     if args.daemon:
-        logger.info("Starting sampling daemon (interval=%ds, rate=%.1f%%)", args.interval, args.rate * 100)
+        logger.info(
+            "Starting sampling daemon (interval=%ds, rate=%.1f%%)", args.interval, args.rate * 100
+        )
         try:
             while True:
                 run_sampling_once(run_source, db, args.rate, args.scorer)

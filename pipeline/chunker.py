@@ -49,7 +49,17 @@ class Chunk:
 
     def to_passage(self, score: Optional[float] = None) -> Passage:
         """Convert to Passage for retrieval."""
-        pid = self.clause_id if self.clause_id and ("-" in self.clause_id or self.clause_id.startswith("ndct") or self.clause_id.startswith("ipc") or self.clause_id.startswith("lamotrigine")) else self.id
+        pid = (
+            self.clause_id
+            if self.clause_id
+            and (
+                "-" in self.clause_id
+                or self.clause_id.startswith("ndct")
+                or self.clause_id.startswith("ipc")
+                or self.clause_id.startswith("lamotrigine")
+            )
+            else self.id
+        )
         return Passage(
             id=pid,
             text=self.text,
@@ -230,14 +240,20 @@ def split_into_chunks(
         # Assign canonical statutory clause IDs for key reference case provisions
         assigned_clause_id = current_clause
         if "ipc_pv_guidance" in source_doc.lower():
-            if "2.5.3.6" in full_text or "hospitalization" in full_text.lower() and "serious" in full_text.lower():
+            if (
+                "2.5.3.6" in full_text
+                or "hospitalization" in full_text.lower()
+                and "serious" in full_text.lower()
+            ):
                 assigned_clause_id = "ipc-pv-guidance-sec4-seriousness"
             elif "2.7.1" in full_text or "15 calendar days" in full_text.lower():
                 assigned_clause_id = "ipc-pv-guidance-sec2-7-1"
             elif "5.2" in full_text and "expectedness" in full_text.lower():
                 assigned_clause_id = "ipc-pv-guidance-sec5-expectedness"
         elif "ndct_rules" in source_doc.lower():
-            if ("fifteen days" in full_text.lower() or "fifteen calendar days" in full_text.lower()) and "serious" in full_text.lower():
+            if (
+                "fifteen days" in full_text.lower() or "fifteen calendar days" in full_text.lower()
+            ) and "serious" in full_text.lower():
                 assigned_clause_id = "ndct-2019-second-sched-table1"
         elif "lamotrigine" in source_doc.lower():
             if "WARNING: SERIOUS SKIN RASHES" in full_text:

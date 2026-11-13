@@ -39,7 +39,9 @@ def test_retry_only_retryable_errors():
     # 3. HTTP 500 / 502 / 503 are retryable
     resp_500 = requests.Response()
     resp_500.status_code = 500
-    assert is_retryable_error(requests.HTTPError("Internal Server Error", response=resp_500)) is True
+    assert (
+        is_retryable_error(requests.HTTPError("Internal Server Error", response=resp_500)) is True
+    )
 
     resp_503 = requests.Response()
     resp_503.status_code = 503
@@ -49,7 +51,10 @@ def test_retry_only_retryable_errors():
     for code in [400, 401, 403, 404, 422]:
         resp_4xx = requests.Response()
         resp_4xx.status_code = code
-        assert is_retryable_error(requests.HTTPError(f"Client Error {code}", response=resp_4xx)) is False
+        assert (
+            is_retryable_error(requests.HTTPError(f"Client Error {code}", response=resp_4xx))
+            is False
+        )
 
     # 5. ValueErrors / non-network errors are not retryable
     assert is_retryable_error(ValueError("Invalid syntax")) is False

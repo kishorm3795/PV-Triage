@@ -234,7 +234,9 @@ def assessor_node(state: AgentState) -> AgentState:
 
     try:
         # Task 4: Check bounds before execution
-        bound_escalation = _check_bounds({**state, "step_count": step_count, "tool_log": tool_log}, "assessor")
+        bound_escalation = _check_bounds(
+            {**state, "step_count": step_count, "tool_log": tool_log}, "assessor"
+        )
         if bound_escalation is not None:
             return bound_escalation
 
@@ -254,7 +256,12 @@ def assessor_node(state: AgentState) -> AgentState:
         # RETRY BRANCH: Assessor responds to Verifier feedback with alternative strategy
         # --------------------------------------------------------------------
         if retry_count > 0 and verifier_feedback:
-            logger.info("Assessor retry %d executing with strategy '%s': %s", retry_count, search_strategy, verifier_feedback)
+            logger.info(
+                "Assessor retry %d executing with strategy '%s': %s",
+                retry_count,
+                search_strategy,
+                verifier_feedback,
+            )
 
             # Different search strategy: direct clause lookup and exact verbatim extraction
             clause_seriousness = tools.get_clause("ipc-pv-guidance-sec4-seriousness")
@@ -347,7 +354,9 @@ def assessor_node(state: AgentState) -> AgentState:
         # Tool 1: extract request fields
         req_fields = tools.get_request_fields(run_id, report=report)
         suspect_drug = req_fields.get("suspect_drug") or report.get("suspect_drug", "")
-        reaction_desc = req_fields.get("reaction_description") or report.get("reaction_description", "")
+        reaction_desc = req_fields.get("reaction_description") or report.get(
+            "reaction_description", ""
+        )
         drug_start_date = req_fields.get("drug_start_date") or report.get("drug_start_date")
         event_date = req_fields.get("event_date") or report.get("event_date")
         outcome = str(req_fields.get("outcome") or report.get("outcome", ""))
@@ -457,9 +466,21 @@ def assessor_node(state: AgentState) -> AgentState:
         text_full = f"{reaction_desc} {narrative}".lower()
         has_clinical_skin_signal = any(
             t in text_full
-            for t in ["peel", "blister", "rash", "necrolysis", "stevens-johnson", "sjs", "ten", "desquamation", "burn"]
+            for t in [
+                "peel",
+                "blister",
+                "rash",
+                "necrolysis",
+                "stevens-johnson",
+                "sjs",
+                "ten",
+                "desquamation",
+                "burn",
+            ]
         )
-        if not has_clinical_skin_signal and not any("skin" in m.lower() or "rash" in m.lower() for m in medical_terms):
+        if not has_clinical_skin_signal and not any(
+            "skin" in m.lower() or "rash" in m.lower() for m in medical_terms
+        ):
             trace.append(
                 TraceStep(
                     step=step_count,
@@ -486,14 +507,18 @@ def assessor_node(state: AgentState) -> AgentState:
         # Required Path Step 2: Identify the provision that seems to apply
         # --------------------------------------------------------------------
         # Inpatient hospitalisation applies under IPC Guidance Chapter 2 Section 2.5.3.6
-        seriousness_query = "IPC Pharmacovigilance Guidance seriousness criteria inpatient hospitalisation"
+        seriousness_query = (
+            "IPC Pharmacovigilance Guidance seriousness criteria inpatient hospitalisation"
+        )
         seriousness_passages = tools.search_corpus(seriousness_query, k=3)
         for p in seriousness_passages:
             if not any(existing.id == p.id for existing in retrieved_passages):
                 retrieved_passages.append(p)
 
         clause_seriousness = tools.get_clause("ipc-pv-guidance-sec4-seriousness")
-        if clause_seriousness and not any(existing.id == clause_seriousness.id for existing in retrieved_passages):
+        if clause_seriousness and not any(
+            existing.id == clause_seriousness.id for existing in retrieved_passages
+        ):
             retrieved_passages.append(clause_seriousness)
 
         # --------------------------------------------------------------------
@@ -509,7 +534,9 @@ def assessor_node(state: AgentState) -> AgentState:
                     retrieved_passages.append(p)
 
             clause_timeline = tools.get_clause("ndct-2019-second-sched-table1")
-            if clause_timeline and not any(existing.id == clause_timeline.id for existing in retrieved_passages):
+            if clause_timeline and not any(
+                existing.id == clause_timeline.id for existing in retrieved_passages
+            ):
                 retrieved_passages.append(clause_timeline)
         else:
             logger.info("MODIFYING_PROVISION_SEARCH=off: Skipping modifying provision search step")
@@ -519,7 +546,12 @@ def assessor_node(state: AgentState) -> AgentState:
         # --------------------------------------------------------------------
         # Terms read from retrieved package insert & guidance:
         # Stevens-Johnson syndrome, toxic epidermal necrolysis, hospitalization, serious skin rashes
-        read_terms = ["Stevens-Johnson syndrome", "toxic epidermal necrolysis", "hospitalization", "serious skin rashes"]
+        read_terms = [
+            "Stevens-Johnson syndrome",
+            "toxic epidermal necrolysis",
+            "hospitalization",
+            "serious skin rashes",
+        ]
         requery = f"{suspect_drug} {' '.join(read_terms)}"
         requery_passages = tools.search_corpus(requery, k=3)
         for p in requery_passages:
@@ -535,7 +567,9 @@ def assessor_node(state: AgentState) -> AgentState:
         # --------------------------------------------------------------------
         is_serious = False
         seriousness_criteria: List[str] = []
-        if any(term in text_full for term in ["hospital", "admitted", "inpatient", "burn unit", "icu"]):
+        if any(
+            term in text_full for term in ["hospital", "admitted", "inpatient", "burn unit", "icu"]
+        ):
             is_serious = True
             seriousness_criteria.append("hospitalisation")
         if any(term in text_full for term in ["fatal", "death", "died"]):
@@ -553,10 +587,14 @@ def assessor_node(state: AgentState) -> AgentState:
         # "skin peeling" / severe desquamation is not listed in the package insert (unexpected)
         is_listed = False
         matched_term = None
-        if "skin rash" in text_full and not any(t in text_full for t in ["peel", "blister", "necrolysis", "sjs", "ten", "severe"]):
+        if "skin rash" in text_full and not any(
+            t in text_full for t in ["peel", "blister", "necrolysis", "sjs", "ten", "severe"]
+        ):
             is_listed = True
             matched_term = "skin rash"
-        elif "erythema multiforme" in text_full and not any(t in text_full for t in ["peel", "necrolysis"]):
+        elif "erythema multiforme" in text_full and not any(
+            t in text_full for t in ["peel", "necrolysis"]
+        ):
             is_listed = True
             matched_term = "erythema multiforme"
 
@@ -835,33 +873,60 @@ def verifier_node(state: AgentState) -> AgentState:
             for c in citations:
                 if c.passage_id in retrieved_passages_map:
                     p_text = retrieved_passages_map[c.passage_id].text.lower()
-                    if any(term in p_text for term in ["hospital", "inpatient", "death", "disability", "life-threatening", "serious"]):
+                    if any(
+                        term in p_text
+                        for term in [
+                            "hospital",
+                            "inpatient",
+                            "death",
+                            "disability",
+                            "life-threatening",
+                            "serious",
+                        ]
+                    ):
                         seriousness_supported = True
                         break
             if not seriousness_supported:
-                verification_errors.append("Seriousness claim is not supported by any cited passage.")
+                verification_errors.append(
+                    "Seriousness claim is not supported by any cited passage."
+                )
 
         if routing == "expedited":
             timeline_supported = False
             for c in citations:
                 if c.passage_id in retrieved_passages_map:
                     p_text = retrieved_passages_map[c.passage_id].text.lower()
-                    if any(term in p_text for term in ["fifteen", "15", "expedited", "calendar days"]):
+                    if any(
+                        term in p_text for term in ["fifteen", "15", "expedited", "calendar days"]
+                    ):
                         timeline_supported = True
                         break
             if not timeline_supported:
-                verification_errors.append("Expedited routing claim is not supported by any cited passage.")
+                verification_errors.append(
+                    "Expedited routing claim is not supported by any cited passage."
+                )
 
         if expectedness.is_listed:
             listedness_supported = False
             for c in citations:
                 if c.passage_id in retrieved_passages_map:
                     p_text = retrieved_passages_map[c.passage_id].text.lower()
-                    if any(term in p_text for term in ["stevens-johnson", "toxic epidermal", "rash", "undesirable", "warning"]):
+                    if any(
+                        term in p_text
+                        for term in [
+                            "stevens-johnson",
+                            "toxic epidermal",
+                            "rash",
+                            "undesirable",
+                            "warning",
+                        ]
+                    ):
                         listedness_supported = True
                         break
             if not listedness_supported:
-                verification_errors.append("Listed expectedness claim is not supported by any cited package insert passage.")
+                verification_errors.append(
+                    "Listed expectedness claim is not supported by any cited package insert passage."
+                )
 
         # Retry logic: max 2 retries (Task 2)
         retry_count = state.get("retry_count", 0)
@@ -870,9 +935,7 @@ def verifier_node(state: AgentState) -> AgentState:
         if not verification_passed:
             if retry_count < 2:
                 # Loop back to Assessor with alternative search strategy
-                feedback_msg = (
-                    f"Verification audit failed (attempt {retry_count + 1}/2): {'; '.join(verification_errors)}"
-                )
+                feedback_msg = f"Verification audit failed (attempt {retry_count + 1}/2): {'; '.join(verification_errors)}"
                 logger.warning(feedback_msg)
                 v_cost, v_flag = _calculate_cost(90, 30)
                 trace.append(
@@ -1153,7 +1216,9 @@ def create_triage_graph() -> Any:
     workflow.add_edge(START, "input_guardrails")
     workflow.add_conditional_edges("input_guardrails", _input_guardrail_router, ["assessor", END])
     workflow.add_edge("assessor", "verifier")
-    workflow.add_conditional_edges("verifier", _verifier_router, ["assessor", "output_guardrails", END])
+    workflow.add_conditional_edges(
+        "verifier", _verifier_router, ["assessor", "output_guardrails", END]
+    )
     workflow.add_edge("output_guardrails", END)
 
     return workflow.compile()

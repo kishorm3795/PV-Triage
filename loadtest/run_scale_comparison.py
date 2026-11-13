@@ -1,4 +1,5 @@
 """Run benchmark ladder with 3 workers for scaling comparison against 1 worker."""
+
 import json
 import os
 from loadtest.run_benchmarks import run_suite

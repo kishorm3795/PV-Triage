@@ -116,21 +116,14 @@ detail = {
     "tool": str | null,
     "query": str | null,
     "passage_ids": [str],
-    "guardrail": {
-        "name": str,
-        "result": "pass" | "block",
-        "reason": str | null
-    },
+    "guardrail": {"name": str, "result": "pass" | "block", "reason": str | null},
     "llm": {
         "attempt": int,
         "retries": int,
         "breaker_state": "closed" | "open" | "half_open",
-        "model": str
+        "model": str,
     },
-    "verification": {
-        "ok": bool,
-        "failed_checks": [str]
-    } | null
+    "verification": {"ok": bool, "failed_checks": [str]} | null,
 }
 ```
 

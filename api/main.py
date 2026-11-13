@@ -75,6 +75,7 @@ def resolve_redis_url(redis_url: str) -> str:
     try:
         import socket
         from urllib.parse import urlparse
+
         parsed = urlparse(redis_url)
         if parsed.hostname == "redis":
             try:
@@ -170,9 +171,7 @@ async def metrics_and_logging_middleware(request: Request, call_next):
             return response
     except Exception as exc:
         duration = time.time() - start_time
-        HTTP_REQUESTS_TOTAL.labels(
-            method=request.method, endpoint=endpoint, status="500"
-        ).inc()
+        HTTP_REQUESTS_TOTAL.labels(method=request.method, endpoint=endpoint, status="500").inc()
         HTTP_REQUEST_DURATION.labels(endpoint=endpoint).observe(duration)
         RUN_ERRORS_TOTAL.labels(error_type="http_500_exception").inc()
         raise exc
@@ -207,7 +206,7 @@ def health():
     stub_base_url = os.getenv("LLM_BASE_URL", "http://stub-llm:8001")
     try:
         with urllib.request.urlopen(f"{stub_base_url}/health", timeout=1.0) as resp:
-            stub_llm_healthy = (resp.status == 200)
+            stub_llm_healthy = resp.status == 200
     except Exception:
         stub_llm_healthy = False
 
@@ -294,9 +293,25 @@ def check_rate_limit(r: redis.Redis, client_id: str, limit_per_min: int) -> tupl
 
 def compute_report_hash(report: AdverseEventReport) -> str:
     """Compute deterministic SHA-256 hash of normalized adverse event report."""
-    reporter_val = report.reporter_type.value if hasattr(report.reporter_type, "value") else str(report.reporter_type)
-    patient_sex_val = (report.patient_sex.value if hasattr(report.patient_sex, "value") else str(report.patient_sex)) if report.patient_sex else None
-    outcome_val = (report.outcome.value if hasattr(report.outcome, "value") else str(report.outcome)) if report.outcome else None
+    reporter_val = (
+        report.reporter_type.value
+        if hasattr(report.reporter_type, "value")
+        else str(report.reporter_type)
+    )
+    patient_sex_val = (
+        (
+            report.patient_sex.value
+            if hasattr(report.patient_sex, "value")
+            else str(report.patient_sex)
+        )
+        if report.patient_sex
+        else None
+    )
+    outcome_val = (
+        (report.outcome.value if hasattr(report.outcome, "value") else str(report.outcome))
+        if report.outcome
+        else None
+    )
 
     norm = {
         "reporter_type": str(reporter_val).lower().strip(),
@@ -307,7 +322,9 @@ def compute_report_hash(report: AdverseEventReport) -> str:
         "event_date": report.event_date.isoformat() if report.event_date else None,
         "reaction_description": " ".join(report.reaction_description.strip().lower().split()),
         "outcome": str(outcome_val).lower().strip() if outcome_val else None,
-        "narrative": " ".join(report.narrative.strip().lower().split()) if report.narrative else None,
+        "narrative": " ".join(report.narrative.strip().lower().split())
+        if report.narrative
+        else None,
     }
     canonical_json = json.dumps(norm, sort_keys=True)
     return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
@@ -364,11 +381,13 @@ async def submit_report(request: Request):
         field_errors = []
         for err in val_err.errors():
             loc = [str(x) for x in err.get("loc", [])]
-            field_errors.append({
-                "loc": loc,
-                "msg": err.get("msg", "Validation error"),
-                "type": err.get("type", "value_error"),
-            })
+            field_errors.append(
+                {
+                    "loc": loc,
+                    "msg": err.get("msg", "Validation error"),
+                    "type": err.get("type", "value_error"),
+                }
+            )
 
         quarantine_id = body.get("report_id") or f"quar_{uuid.uuid4().hex[:8]}"
         cid = getattr(request.state, "correlation_id", quarantine_id)
@@ -748,6 +767,7 @@ def list_quarantine():
 
 class FeedbackRequest(BaseModel):
     """Payload for human evaluator feedback."""
+
     satisfactory: Optional[bool] = None
     rating: Optional[str] = None  # backwards compat: "thumbs_up" | "thumbs_down"
     reason: Optional[str] = None
@@ -768,7 +788,7 @@ async def record_feedback(run_id: str, feedback: FeedbackRequest):
     if feedback.satisfactory is not None:
         is_sat = bool(feedback.satisfactory)
     elif feedback.rating is not None:
-        is_sat = (feedback.rating.lower() == "thumbs_up")
+        is_sat = feedback.rating.lower() == "thumbs_up"
 
     rating_str = feedback.rating or ("thumbs_up" if is_sat else "thumbs_down")
     record = {
@@ -819,9 +839,7 @@ async def get_feedback_summary():
     }
 
 
-
 # Mount the single-page clinical web client at "/"
 web_dir = os.path.join(os.path.dirname(__file__), "web")
 if os.path.isdir(web_dir):
     app.mount("/", StaticFiles(directory=web_dir, html=True), name="web")
-

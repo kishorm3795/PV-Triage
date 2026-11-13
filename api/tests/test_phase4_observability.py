@@ -173,6 +173,7 @@ def test_trace_persists_in_sqlite(sample_run_result):
 
         # Read back directly from SQLite
         import sqlite3
+
         conn = sqlite3.connect(db_path)
         cur = conn.cursor()
         cur.execute("SELECT payload FROM traces WHERE run_id = ?", ("case_sqlite_test",))
@@ -216,10 +217,14 @@ def test_prometheus_metrics_definitions():
 
 def test_record_run_e2e_latency_helper():
     """Verify that record_run_e2e_latency calculates time delta from queued_at."""
+
     class DummyRedis:
         def __init__(self):
             import datetime
-            past = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=3)).isoformat()
+
+            past = (
+                datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=3)
+            ).isoformat()
             self.data = {"run:dummy_01:queued_at": past}
 
         def get(self, key):

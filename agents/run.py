@@ -82,9 +82,7 @@ def run_graph(report: Dict[str, Any], run_id: str) -> RunResult:
             status=final_state.get("status", "completed"),
             routing=final_state.get("routing"),
             routing_basis=final_state.get("routing_basis"),
-            seriousness=final_state.get(
-                "seriousness", Seriousness(is_serious=False, criteria=[])
-            ),
+            seriousness=final_state.get("seriousness", Seriousness(is_serious=False, criteria=[])),
             expectedness=final_state.get(
                 "expectedness", Expectedness(is_listed=False, matched_term=None)
             ),

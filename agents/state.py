@@ -73,6 +73,7 @@ def make_trace_detail(
     if breaker_state is None:
         try:
             from llm.resilience import get_circuit_breaker
+
             breaker_state = get_circuit_breaker().get_state()
         except Exception:
             breaker_state = "closed"

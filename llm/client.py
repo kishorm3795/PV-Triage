@@ -202,7 +202,9 @@ class LLMClient:
         if "temperature" in kwargs:
             gen_config["temperature"] = kwargs["temperature"]
         if "max_tokens" in kwargs or "max_output_tokens" in kwargs:
-            gen_config["maxOutputTokens"] = kwargs.get("max_tokens") or kwargs.get("max_output_tokens")
+            gen_config["maxOutputTokens"] = kwargs.get("max_tokens") or kwargs.get(
+                "max_output_tokens"
+            )
         if gen_config:
             body["generationConfig"] = gen_config
 

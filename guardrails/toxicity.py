@@ -59,7 +59,10 @@ CLINICAL_WHITELIST_TERMS = {
 
 # Explicit harassment, hate speech, threats, and abusive patterns
 TOXIC_PATTERNS = [
-    re.compile(r"\b(?:f[*u]+ck(?:ing|er)?|f\*{2,}ing|sh[*i]+t|b[*i]+tch|bastard|asshole|cunt)\b", re.IGNORECASE),
+    re.compile(
+        r"\b(?:f[*u]+ck(?:ing|er)?|f\*{2,}ing|sh[*i]+t|b[*i]+tch|bastard|asshole|cunt)\b",
+        re.IGNORECASE,
+    ),
     re.compile(r"\b(?:kill\s+yourself|go\s+die|die\s+in\s+a\s+fire)\b", re.IGNORECASE),
     re.compile(r"\b(?:nigg[ea]r|faggot|kike|chink|spic|retard)\b", re.IGNORECASE),
     re.compile(r"\b(?:i\s+will\s+kill\s+you|murder\s+you|bomb\s+your)\b", re.IGNORECASE),
@@ -98,7 +101,9 @@ def check_toxicity(
         if match:
             matched_term = match.group(0)
             role_str = "input report" if is_input else "model output"
-            reason = f"Toxic content detected in {role_str}: matched abusive pattern '{matched_term}'"
+            reason = (
+                f"Toxic content detected in {role_str}: matched abusive pattern '{matched_term}'"
+            )
             logger.warning(
                 "Toxicity detected in %s [run_id=%s]: %s",
                 role_str,

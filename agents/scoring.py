@@ -95,8 +95,7 @@ class LocalScorer:
                 if citation.passage_id in passage_map:
                     p_text = passage_map[citation.passage_id].text.lower()
                     if any(
-                        term in p_text
-                        for term in ["fifteen", "15", "expedited", "calendar days"]
+                        term in p_text for term in ["fifteen", "15", "expedited", "calendar days"]
                     ):
                         timeline_supported = True
                         break

@@ -99,7 +99,9 @@ def run_benchmark(
         csv_prefix,
         "--only-summary",
     ]
-    print(f"\n>>> Running Locust: Concurrency={concurrency}, SpawnRate={spawn_rate}, Duration={duration_s}s...")
+    print(
+        f"\n>>> Running Locust: Concurrency={concurrency}, SpawnRate={spawn_rate}, Duration={duration_s}s..."
+    )
     t0 = time.time()
     res = subprocess.run(cmd, capture_output=True, text=True)
     elapsed = time.time() - t0

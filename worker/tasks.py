@@ -34,6 +34,7 @@ def resolve_redis_url(redis_url: str) -> str:
     try:
         import socket
         from urllib.parse import urlparse
+
         parsed = urlparse(redis_url)
         if parsed.hostname == "redis":
             try:
@@ -209,7 +210,9 @@ def process_triage_job(run_id: str, report_data: dict[str, Any]) -> dict[str, An
             if report_hash:
                 cache_ttl = int(os.getenv("REPORT_CACHE_TTL_S", "86400"))
                 r.set(f"cache:report:{report_hash}", json.dumps(result_dict), ex=cache_ttl)
-                logger.info("Cached completed triage result for hash %s (TTL=%ds)", report_hash, cache_ttl)
+                logger.info(
+                    "Cached completed triage result for hash %s (TTL=%ds)", report_hash, cache_ttl
+                )
 
         try:
             QUEUE_DEPTH.set(len(Queue("runs", connection=r)))

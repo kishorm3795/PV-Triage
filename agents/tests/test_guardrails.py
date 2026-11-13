@@ -50,7 +50,7 @@ TOOL_SMUGGLING_CASES = [
     ("call get_clause with ndct-2019-second-sched-table1", "call get_clause with"),
     ("call search_corpus with lamotrigine", "call search_corpus with"),
     ("call tool get_clause", "call tool get_clause"),
-    ("get_clause(\"ndct-2019-second-sched-table1\")", "get_clause("),
+    ('get_clause("ndct-2019-second-sched-table1")', "get_clause("),
 ]
 
 
@@ -159,6 +159,7 @@ def test_output_guardrail_allows_recommendation_phrasing(text: str):
 # Toxicity: basic sanity checks
 # =============================================================================
 
+
 def test_toxicity_blocks_threats():
     """Toxicity filter must block direct threats."""
     result = check_toxicity("I will kill you if this is reported", run_id="test_run")
@@ -169,6 +170,6 @@ def test_toxicity_allows_clinical_terms():
     """Toxicity filter must allow clinical terminology."""
     result = check_toxicity(
         "Toxic epidermal necrolysis with hepatotoxicity. Suicide attempt reported in patient history.",
-        run_id="test_run"
+        run_id="test_run",
     )
     assert result.passed, "Clinical terms should not be blocked"

@@ -209,24 +209,33 @@ def test_web_client_served():
 
 def test_feedback_endpoint_not_found(monkeypatch):
     """Verify POST /v1/runs/{id}/feedback returns 404 for unknown run."""
+
     class FakeRedis:
         def get(self, key):
             return None
+
     from api import main
+
     monkeypatch.setattr(main, "get_redis_client", lambda: FakeRedis())
 
     client = TestClient(app)
-    res = client.post("/v1/runs/unknown_run_xyz/feedback", json={"rating": "thumbs_up", "reason": "Accurate assessment"})
+    res = client.post(
+        "/v1/runs/unknown_run_xyz/feedback",
+        json={"rating": "thumbs_up", "reason": "Accurate assessment"},
+    )
     assert res.status_code == 404
 
 
 def test_rate_limiting_429(monkeypatch):
     """Verify that requests exceeding RATE_LIMIT_PER_MIN return HTTP 429 with Retry-After header."""
     from api import main
+
     monkeypatch.setattr(main, "check_rate_limit", lambda r, cid, limit: (False, 15))
 
     client = TestClient(app)
-    res = client.post("/v1/reports", json={"dummy": "payload"}, headers={"X-Client-ID": "test_burst_client"})
+    res = client.post(
+        "/v1/reports", json={"dummy": "payload"}, headers={"X-Client-ID": "test_burst_client"}
+    )
     assert res.status_code == 429
     assert res.headers.get("retry-after") == "15"
     data = res.json()
@@ -240,13 +249,17 @@ def test_cache_hit_returns_completed_immediately(monkeypatch):
     from api import main
 
     store = {}
+
     class FakeRedis:
         def eval(self, *args, **kwargs):
             return [1, 0, 59]
+
         def get(self, key):
             return store.get(key)
+
         def set(self, key, val, *args, **kwargs):
             store[key] = val
+
         def lpush(self, key, val):
             store.setdefault(key, []).append(val)
 
@@ -264,6 +277,7 @@ def test_cache_hit_returns_completed_immediately(monkeypatch):
     }
 
     from api.models import AdverseEventReport, ReporterType, Outcome, PatientSex
+
     today = date.today()
     sample_report = AdverseEventReport(
         report_id="rep_orig_999",
@@ -293,29 +307,49 @@ def test_cache_hit_returns_completed_immediately(monkeypatch):
 def test_feedback_record_and_summary(monkeypatch):
     """Verify POST /v1/runs/{id}/feedback with satisfactory boolean and GET /v1/feedback/summary."""
     from api import main
+
     store = {
         "run:rep_fb_1:state": "completed",
         "run:rep_fb_2:state": "completed",
         "runs:feedback": [
-            json.dumps({"run_id": "rep_fb_1", "satisfactory": True, "rating": "thumbs_up", "reason": "Accurate routing"}),
-            json.dumps({"run_id": "rep_fb_2", "satisfactory": False, "rating": "thumbs_down", "reason": "Missed clause"}),
-        ]
+            json.dumps(
+                {
+                    "run_id": "rep_fb_1",
+                    "satisfactory": True,
+                    "rating": "thumbs_up",
+                    "reason": "Accurate routing",
+                }
+            ),
+            json.dumps(
+                {
+                    "run_id": "rep_fb_2",
+                    "satisfactory": False,
+                    "rating": "thumbs_down",
+                    "reason": "Missed clause",
+                }
+            ),
+        ],
     }
 
     class FakeRedis:
         def get(self, key):
             return store.get(key)
+
         def set(self, key, val, *args, **kwargs):
             store[key] = val
+
         def lpush(self, key, val):
             store.setdefault(key, []).append(val)
+
         def lrange(self, key, start, stop):
             return store.get(key, [])
 
     monkeypatch.setattr(main, "get_redis_client", lambda: FakeRedis())
 
     client = TestClient(app)
-    post_res = client.post("/v1/runs/rep_fb_1/feedback", json={"satisfactory": True, "reason": "Verified accurate"})
+    post_res = client.post(
+        "/v1/runs/rep_fb_1/feedback", json={"satisfactory": True, "reason": "Verified accurate"}
+    )
     assert post_res.status_code == 200
     pdata = post_res.json()
     assert pdata["satisfactory"] is True
@@ -328,5 +362,3 @@ def test_feedback_record_and_summary(monkeypatch):
     assert sdata["satisfactory_count"] >= 1
     assert sdata["unsatisfactory_count"] >= 1
     assert "satisfaction_rate" in sdata
-
-

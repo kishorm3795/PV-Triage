@@ -125,6 +125,7 @@ Each `TraceStep` in the run result captures `prompt_tokens`, `completion_tokens`
 4. Or use this Python snippet on any batch output:
    ```python
    import json
+
    with open("agents/out/batch_*.json") as f:
        data = json.load(f)
    total_cost = sum(r["cost_usd"] for r in data["results"])

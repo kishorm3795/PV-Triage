@@ -44,11 +44,13 @@ if llm_breaker_state is not None:
 
 class CircuitBreakerOpenError(RuntimeError):
     """Raised when an LLM call is attempted while the circuit breaker is OPEN."""
+
     pass
 
 
 class LLMUnavailableError(RuntimeError):
     """Raised when the LLM service is completely unavailable or exhausted."""
+
     pass
 
 
@@ -66,9 +68,7 @@ def get_max_attempts() -> int:
     """Retrieve maximum retry attempts from environment (no hardcoded default)."""
     raw = os.getenv("LLM_MAX_ATTEMPTS") or os.getenv("LLM_MAX_RETRIES")
     if raw is None or not raw.strip():
-        raise ValueError(
-            "LLM_MAX_ATTEMPTS or LLM_MAX_RETRIES environment variable must be set."
-        )
+        raise ValueError("LLM_MAX_ATTEMPTS or LLM_MAX_RETRIES environment variable must be set.")
     return int(raw.strip())
 
 
@@ -182,7 +182,11 @@ class CircuitBreaker:
         if self.state == self.OPEN:
             elapsed = self.clock() - self.last_failure_time
             if elapsed >= self.reset_s:
-                logger.info("Circuit breaker cooldown passed (%.2fs >= %.2fs). Transitioning to HALF_OPEN", elapsed, self.reset_s)
+                logger.info(
+                    "Circuit breaker cooldown passed (%.2fs >= %.2fs). Transitioning to HALF_OPEN",
+                    elapsed,
+                    self.reset_s,
+                )
                 self.state = self.HALF_OPEN
                 self._update_gauge()
         return self.state
@@ -190,7 +194,9 @@ class CircuitBreaker:
     def record_success(self) -> None:
         """Record successful invocation."""
         if self.state in (self.HALF_OPEN, self.OPEN):
-            logger.info("Circuit breaker trial call succeeded. Transitioning from %s to CLOSED", self.state)
+            logger.info(
+                "Circuit breaker trial call succeeded. Transitioning from %s to CLOSED", self.state
+            )
         self.state = self.CLOSED
         self.consecutive_failures = 0
         self._update_gauge()
@@ -200,7 +206,9 @@ class CircuitBreaker:
         self.consecutive_failures += 1
         self.last_failure_time = self.clock()
         if self.state == self.HALF_OPEN:
-            logger.warning("Circuit breaker trial call failed in HALF_OPEN. Transitioning back to OPEN.")
+            logger.warning(
+                "Circuit breaker trial call failed in HALF_OPEN. Transitioning back to OPEN."
+            )
             self.state = self.OPEN
             self._update_gauge()
         elif self.state == self.CLOSED and self.consecutive_failures >= self.fails_threshold:
@@ -258,18 +266,30 @@ class CircuitBreaker:
             except Exception as exc:
                 last_exc = exc
                 if not is_retryable_error(exc):
-                    logger.warning("Non-retryable error encountered: %s. Aborting retries immediately.", exc)
+                    logger.warning(
+                        "Non-retryable error encountered: %s. Aborting retries immediately.", exc
+                    )
                     self.record_failure()
                     raise exc
 
                 if attempt >= attempts_limit:
-                    logger.warning("Exhausted all %d attempts on retryable error: %s", attempts_limit, exc)
+                    logger.warning(
+                        "Exhausted all %d attempts on retryable error: %s", attempts_limit, exc
+                    )
                     self.record_failure()
                     raise exc
 
                 retries_done += 1
-                backoff = min(max_backoff_s, base_backoff_s * (2 ** (attempt - 1))) + random.uniform(0, jitter_s)
-                logger.info("Retryable error '%s' on attempt %d/%d. Backing off for %.3fs.", exc, attempt, attempts_limit, backoff)
+                backoff = min(
+                    max_backoff_s, base_backoff_s * (2 ** (attempt - 1))
+                ) + random.uniform(0, jitter_s)
+                logger.info(
+                    "Retryable error '%s' on attempt %d/%d. Backing off for %.3fs.",
+                    exc,
+                    attempt,
+                    attempts_limit,
+                    backoff,
+                )
                 self.sleep_fn(backoff)
 
         if last_exc is not None:
