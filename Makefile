@@ -22,16 +22,16 @@ logs:
 	docker compose logs -f
 
 test:
-	PYTHONPATH=scripts:. python3.11 -m pytest api/tests/ -v
+	PYTHONPATH=backend:scripts:. pytest -v
 
 ingest:
 	docker compose run --rm ingest
 
 eval:
-	@echo "not implemented yet"
+	PYTHONPATH=backend:. python3 -m eval.run --prompt-version v1 --direct
 
 load:
-	@echo "not implemented yet"
+	locust -f loadtest/locustfile.py --headless -u 20 -r 5 --run-time 30s --host http://localhost:8000
 
 scan-secrets:
 	@bash ./scripts/scan_secrets.sh

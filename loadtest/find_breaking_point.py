@@ -1,5 +1,4 @@
 """Test higher concurrency for 1 worker to find the exact breaking point."""
-
 import json
 from loadtest.run_benchmarks import run_suite
 
