@@ -29,9 +29,14 @@ REGULATORY_ACTION_BLOCK_PATTERNS = [
     re.compile(r"\breport\s+(?:is|was)\s+(?:submitted|filed|reported)\b", re.IGNORECASE),
     re.compile(r"\bfiling\s+complete(?:d)?\b", re.IGNORECASE),
     re.compile(r"\bsubmission\s+complete(?:d)?\b", re.IGNORECASE),
-    re.compile(r"\bsubmitted\s+to\s+(?:the\s+)?(?:cdsco|fda|regulatory|authorities|national|moh)\b", re.IGNORECASE),
-    re.compile(r"\bfiled\s+with\s+(?:the\s+)?(?:cdsco|fda|regulatory|authorities|national|moh)\b", re.IGNORECASE),
+    # Include CLA (Central Licensing Authority) and other Indian regulatory bodies
+    re.compile(r"\bsubmitted\s+to\s+(?:the\s+)?(?:cdsco|fda|regulatory|authorities|national|moh|cla|central\s+licensing\s+authority)\b", re.IGNORECASE),
+    re.compile(r"\bfiled\s+with\s+(?:the\s+)?(?:cdsco|fda|regulatory|authorities|national|moh|cla|central\s+licensing\s+authority)\b", re.IGNORECASE),
     re.compile(r"\breport\s+(?:is|has\s+been)\s+transmitted\b", re.IGNORECASE),
+    # Catch "submitted on <date>" patterns (past tense action claim)
+    re.compile(r"\b(?:case|report)\s+(?:was|is)\s+submitted\s+on\s+\d{4}-\d{2}-\d{2}\b", re.IGNORECASE),
+    # Catch "submitted on" without "have/has/been" - action claim
+    re.compile(r"\bsubmitted\s+on\s+\d{4}-\d{2}-\d{2}\b", re.IGNORECASE),
 ]
 
 
