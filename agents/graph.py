@@ -55,6 +55,81 @@ from shared.contracts import (
 
 logger = logging.getLogger("agents.graph")
 
+
+def validate_report_input(report: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+    """Validate report input for required fields and basic sanitization.
+    
+    Args:
+        report: The report dictionary to validate.
+        
+    Returns:
+        Tuple of (is_valid, error_message). If is_valid is False, error_message
+        contains the reason.
+    """
+    if not isinstance(report, dict):
+        return False, "Report must be a dictionary"
+    
+    # Required fields
+    required_fields = [
+        "report_id",
+        "reporter_type",
+        "patient_age",
+        "patient_sex",
+        "suspect_drug",
+        "drug_start_date",
+        "event_date",
+        "reaction_description",
+        "outcome",
+    ]
+    
+    for field in required_fields:
+        if field not in report:
+            return False, f"Missing required field: {field}"
+    
+    # Type validation
+    if not isinstance(report.get("patient_age"), int):
+        return False, "patient_age must be an integer"
+    
+    if report.get("patient_age") < 0 or report.get("patient_age") > 150:
+        return False, "patient_age must be between 0 and 150"
+    
+    if not isinstance(report.get("reaction_description"), str):
+        return False, "reaction_description must be a string"
+    
+    # Length limits to prevent abuse
+    max_text_length = 10000
+    for field in ["reaction_description", "narrative"]:
+        val = report.get(field, "")
+        if isinstance(val, str) and len(val) > max_text_length:
+            return False, f"{field} exceeds maximum length of {max_text_length} characters"
+    
+    # Validate reporter_type
+    valid_reporter_types = {"physician", "pharmacist", "nurse", "consumer", "other", "regulatory"}
+    if report.get("reporter_type") not in valid_reporter_types:
+        return False, f"reporter_type must be one of: {', '.join(valid_reporter_types)}"
+    
+    # Validate patient_sex
+    valid_sex = {"male", "female", "unknown", "other"}
+    if report.get("patient_sex") not in valid_sex:
+        return False, f"patient_sex must be one of: {', '.join(valid_sex)}"
+    
+    # Validate outcome
+    valid_outcomes = {"recovered", "recovering", "not_recovered", "fatal", "unknown"}
+    if report.get("outcome") not in valid_outcomes:
+        return False, f"outcome must be one of: {', '.join(valid_outcomes)}"
+    
+    # Date format validation (basic)
+    import re
+    date_pattern = r'^\d{4}-\d{2}-\d{2}$'
+    for field in ["drug_start_date", "event_date"]:
+        val = report.get(field, "")
+        if isinstance(val, str) and val and not re.match(date_pattern, val):
+            return False, f"{field} must be in YYYY-MM-DD format"
+    
+    return True, None
+
+
+
 MAX_STEPS = int(os.getenv("MAX_STEPS", "15"))
 MAX_TOOL_CALLS = int(os.getenv("MAX_TOOL_CALLS", "20"))
 RUN_TIMEOUT_S = float(os.getenv("RUN_TIMEOUT_S", "30.0"))

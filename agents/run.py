@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import time
 from typing import Any, Dict
-from agents.graph import create_triage_graph
+from agents.graph import create_triage_graph, validate_report_input
 from agents.state import AgentState
 from agents.tools import register_run_report
 from shared.contracts import (
@@ -47,6 +47,18 @@ def run_graph(report: Dict[str, Any], run_id: str) -> RunResult:
     Returns:
         RunResult meeting the shared/contracts.py specification.
     """
+    # Security: Validate report input before processing
+    is_valid, error_msg = validate_report_input(report)
+    if not is_valid:
+        logger.error("Invalid report input for run %s: %s", run_id, error_msg)
+        return RunResult(
+            run_id=run_id,
+            status="failed",
+            routing=None,
+            routing_basis=None,
+            escalation_reason=f"Input validation failed: {error_msg}",
+        )
+
     register_run_report(run_id, report)
 
     initial_state: AgentState = {

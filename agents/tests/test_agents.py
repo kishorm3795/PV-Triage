@@ -6,6 +6,19 @@ import pytest
 from agents.run import reset_graph, run_graph
 from shared.contracts import RunResult
 
+# Valid report base with all required fields for input validation
+VALID_REPORT_BASE = {
+    "reporter_type": "physician",
+    "patient_age": 45,
+    "patient_sex": "female",
+    "suspect_drug": "Lamotrigine",
+    "drug_start_date": "2026-09-20",
+    "event_date": "2026-09-27",
+    "reaction_description": "Severe skin peeling with hospital admission",
+    "outcome": "not_recovered",
+    "narrative": "Patient admitted for inpatient care.",
+}
+
 
 @pytest.fixture(autouse=True)
 def mock_llm_response():
@@ -143,12 +156,12 @@ def test_run_graph_forced_unsupported_citation_caught_by_verifier():
 def test_run_graph_missing_dates_escalates():
     """Verify missing dates escalate with timing reason."""
     report = {
-        "report_id": "rep_missing_dates",
-        "suspect_drug": "Lamotrigine",
-        "reaction_description": "Skin peeling and blistering",
-        "outcome": "not_recovered",
-        # Missing drug_start_date and event_date
+        **{"report_id": "rep_missing_dates", "reaction_description": "Skin peeling and blistering", "outcome": "not_recovered"},
+        **VALID_REPORT_BASE,
     }
+    # Clear dates to test graph-level handling
+    report["drug_start_date"] = ""
+    report["event_date"] = ""
     result = run_graph(report, "run_timing_001")
     assert isinstance(result, RunResult)
     assert result.status == "escalated"
@@ -159,12 +172,8 @@ def test_run_graph_missing_dates_escalates():
 def test_run_graph_inconsistent_dates_escalates():
     """Verify event_date earlier than drug_start_date escalates with chronological inconsistency reason."""
     report = {
-        "report_id": "rep_bad_dates",
-        "suspect_drug": "Lamotrigine",
-        "drug_start_date": "2026-09-20",
-        "event_date": "2026-09-10",  # 10 days before drug started!
-        "reaction_description": "Skin peeling and blistering",
-        "outcome": "not_recovered",
+        **VALID_REPORT_BASE,
+        **{"report_id": "rep_bad_dates", "drug_start_date": "2026-09-20", "event_date": "2026-09-10", "reaction_description": "Skin peeling and blistering", "outcome": "not_recovered"},
     }
     result = run_graph(report, "run_timing_002")
     assert isinstance(result, RunResult)
@@ -175,12 +184,8 @@ def test_run_graph_inconsistent_dates_escalates():
 def test_run_graph_unmatchable_reaction_escalates():
     """Verify non-clinical reaction description that cannot be matched to package insert escalates."""
     report = {
-        "report_id": "rep_unmatchable",
-        "suspect_drug": "Lamotrigine",
-        "drug_start_date": "2026-09-20",
-        "event_date": "2026-09-27",
-        "reaction_description": "Patient felt completely funny and weird throughout the evening",
-        "outcome": "recovered",
+        **VALID_REPORT_BASE,
+        **{"report_id": "rep_unmatchable", "drug_start_date": "2026-09-20", "event_date": "2026-09-27", "reaction_description": "Patient felt completely funny and weird throughout the evening", "outcome": "recovered"},
     }
     result = run_graph(report, "run_unmatchable_001")
     assert isinstance(result, RunResult)
@@ -193,11 +198,8 @@ def test_run_graph_unmatchable_reaction_escalates():
 def test_run_graph_assessor_crash_fails():
     """Task 5: Assessor crash returns status='failed'."""
     report = {
-        "report_id": "rep_crash_assessor",
-        "suspect_drug": "Lamotrigine",
-        "drug_start_date": "2026-09-20",
-        "event_date": "2026-09-27",
-        "reaction_description": "Skin peeling badly",
+        **{"report_id": "rep_crash_assessor", "reaction_description": "Skin peeling badly"},
+        **VALID_REPORT_BASE,
     }
     with patch("agents.graph.wrap_tools", side_effect=ZeroDivisionError("Assessor internal fault")):
         result = run_graph(report, "run_crash_001")
@@ -211,11 +213,8 @@ def test_run_graph_assessor_crash_fails():
 def test_run_graph_verifier_crash_escalates():
     """Task 5: Verifier crash returns status='escalated' per Global Rule 6."""
     report = {
-        "report_id": "rep_crash_verifier",
-        "suspect_drug": "Lamotrigine",
-        "drug_start_date": "2026-09-20",
-        "event_date": "2026-09-27",
-        "reaction_description": "Severe skin peeling with hospital admission",
+        **{"report_id": "rep_crash_verifier"},
+        **VALID_REPORT_BASE,
     }
 
     def mock_load_prompt(name, *args, **kwargs):
@@ -233,7 +232,7 @@ def test_run_graph_verifier_crash_escalates():
 def test_run_graph_error_handling():
     """Verify run_graph handles top-level graph exceptions by returning status='failed'."""
     with patch("agents.run.get_graph", side_effect=RuntimeError("Graph engine crashed")):
-        result = run_graph({}, "run_fail_001")
+        result = run_graph({**{"report_id": "rep_fail"}, **VALID_REPORT_BASE}, "run_fail_001")
         assert isinstance(result, RunResult)
         assert result.status == "failed"
         assert "Execution error: Graph engine crashed" in (result.escalation_reason or "")
@@ -243,10 +242,8 @@ def test_run_graph_max_tool_calls_escalates(monkeypatch):
     """Verify exceeding MAX_TOOL_CALLS immediately escalates with the bound named in reason."""
     monkeypatch.setenv("MAX_TOOL_CALLS", "2")
     report = {
-        "report_id": "rep_bound_exceeded",
-        "suspect_drug": "Lamotrigine",
-        "reaction_description": "Skin peeling and blistering",
-        "outcome": "not_recovered",
+        **{"report_id": "rep_bound_exceeded", "reaction_description": "Skin peeling and blistering", "outcome": "not_recovered"},
+        **VALID_REPORT_BASE,
     }
     result = run_graph(report, "run_bound_001")
     assert isinstance(result, RunResult)
@@ -261,11 +258,8 @@ def test_run_graph_bounds_step_limit_escalates(monkeypatch):
     """Task 4: Exceeding MAX_STEPS escalates with bound reason."""
     monkeypatch.setenv("MAX_STEPS", "1")
     report = {
-        "report_id": "rep_step_bound",
-        "suspect_drug": "Lamotrigine",
-        "drug_start_date": "2026-09-20",
-        "event_date": "2026-09-27",
-        "reaction_description": "Skin peeling and blistering admitted to hospital",
+        **{"report_id": "rep_step_bound", "reaction_description": "Skin peeling and blistering admitted to hospital"},
+        **VALID_REPORT_BASE,
     }
     result = run_graph(report, "run_step_bound_001")
     assert isinstance(result, RunResult)
