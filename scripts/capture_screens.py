@@ -3,7 +3,7 @@
 Captures clinical web client UI states at both desktop (1440x900) and mobile (390x844):
 - empty
 - running
-- completed
+- completed (light and dark)
 - escalated
 - validation_error
 """
@@ -11,17 +11,21 @@ Captures clinical web client UI states at both desktop (1440x900) and mobile (39
 import os
 import subprocess
 import time
+import urllib.request
+from pathlib import Path
 
 CHROME_PATH = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 OUTPUT_DIR = os.path.abspath("docs/screens")
 BASE_URL = "http://localhost:8000"
 
 STATES = [
-    ("empty", "?state=empty"),
-    ("running", "?state=running"),
-    ("completed", "?state=completed"),
-    ("escalated", "?state=escalated"),
-    ("validation_error", "?state=validation_error"),
+    ("empty", "?state=empty&theme=light"),
+    ("running", "?state=running&theme=light"),
+    ("completed", "?state=completed&theme=light"),
+    ("completed_light", "?state=completed&theme=light"),
+    ("completed_dark", "?state=completed&theme=dark"),
+    ("escalated", "?state=escalated&theme=light"),
+    ("validation_error", "?state=validation_error&theme=light"),
 ]
 
 VIEWPORTS = [
@@ -30,13 +34,32 @@ VIEWPORTS = [
 ]
 
 
+def resolve_base_url() -> str:
+    """Determine whether to use live localhost server or direct file URL."""
+    try:
+        req = urllib.request.Request(BASE_URL, headers={"User-Agent": "ScreenshotCapture/1.0"})
+        with urllib.request.urlopen(req, timeout=1.0) as resp:
+            if resp.status == 200:
+                print(f"Connecting to live server at {BASE_URL}")
+                return BASE_URL
+    except Exception:
+        pass
+
+    local_html = Path(__file__).resolve().parent.parent / "frontend" / "index.html"
+    file_url = local_html.as_uri()
+    print(f"Server not running on {BASE_URL}. Using local file URL: {file_url}")
+    return file_url
+
+
 def capture_all():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
+    base = resolve_base_url()
 
     for state_name, query in STATES:
         for vp_name, vp_dims in VIEWPORTS:
             out_file = os.path.join(OUTPUT_DIR, f"{state_name}_{vp_name}.png")
-            url = f"{BASE_URL}/{query}"
+            # If using file://, query string is appended
+            url = f"{base}{query}"
             cmd = [
                 CHROME_PATH,
                 "--headless=new",
@@ -53,7 +76,7 @@ def capture_all():
                 print(f"  OK ({size_kb:.1f} KB)")
             else:
                 print(f"  FAILED (exit code {res.returncode}): {res.stderr[:200]}")
-            time.sleep(0.5)
+            time.sleep(0.3)
 
 
 if __name__ == "__main__":

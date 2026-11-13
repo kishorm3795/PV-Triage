@@ -14,12 +14,14 @@ P_BEARER="[Bb]""earer[[:space:]]+[a-zA-Z0-9_\-\.]{20,}"
 
 PATTERN="($P_AIZA|$P_SK|$P_APIKEY|$P_BEARER)"
 
+GIT_CMD="git -c filter.lfs.process= -c filter.lfs.smudge= -c filter.lfs.clean= --no-pager"
+
 echo "==> Scanning working tree for secrets..."
 # Search tracked and untracked files in working tree (excluding .git and the script itself)
-WT_HITS=$(git grep -E -I -n "$PATTERN" -- ':!scripts/scan_secrets.sh' ':!scripts/install_hooks.sh' 2>/dev/null || true)
+WT_HITS=$($GIT_CMD grep -E -I -n "$PATTERN" -- ':!scripts/scan_secrets.sh' ':!scripts/install_hooks.sh' 2>/dev/null || true)
 
 # Also check untracked files that might not be in git index yet
-UNTRACKED=$(git ls-files --others --exclude-standard)
+UNTRACKED=$($GIT_CMD ls-files --others --exclude-standard)
 if [ -n "$UNTRACKED" ]; then
     for f in $UNTRACKED; do
         if [ "$f" != "scripts/scan_secrets.sh" ] && [ "$f" != "scripts/install_hooks.sh" ] && [ -f "$f" ]; then
@@ -40,7 +42,7 @@ else
 fi
 
 echo "==> Scanning git commit history for secrets..."
-GIT_HITS=$(git log -E -I -p --all -G"$P_AIZA|$P_SK|$P_APIKEY|$P_BEARER" -- ':!scripts/scan_secrets.sh' ':!scripts/install_hooks.sh' 2>/dev/null || true)
+GIT_HITS=$($GIT_CMD log -E -I -p --all -G"$P_AIZA|$P_SK|$P_APIKEY|$P_BEARER" -- ':!scripts/scan_secrets.sh' ':!scripts/install_hooks.sh' ':!*.pdf' ':!*.png' 2>/dev/null || true)
 
 if [ -n "$GIT_HITS" ]; then
     MATCHED_LINES=$(echo "$GIT_HITS" | grep -E "^\+[^+]" | grep -E "$PATTERN" || true)

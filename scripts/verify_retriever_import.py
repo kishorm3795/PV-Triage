@@ -17,17 +17,13 @@ def verify() -> None:
     print("[verify] Checking pipeline package availability...")
     try:
         import pipeline
-
-        print(
-            f"[verify] Successfully imported pipeline package (path: {getattr(pipeline, '__path__', 'unknown')})"
-        )
+        print(f"[verify] Successfully imported pipeline package (path: {getattr(pipeline, '__path__', 'unknown')})")
     except Exception as exc:
         print(f"[verify] FAILED: Could not import pipeline: {exc}", file=sys.stderr)
         sys.exit(1)
 
     try:
         from pipeline.models import Passage as PipelinePassage
-
         print(f"[verify] Successfully imported pipeline.models.Passage: {PipelinePassage}")
     except Exception as exc:
         print(f"[verify] FAILED: Could not import pipeline.models: {exc}", file=sys.stderr)
@@ -41,18 +37,14 @@ def verify() -> None:
         retrieval_mod = importlib.import_module(agreed_path)
         print(f"[verify] Discovered module {agreed_path}: {retrieval_mod}")
         # Look for retriever candidate
-        candidate = getattr(retrieval_mod, "ChromaRetriever", None) or getattr(
-            retrieval_mod, "get_retriever", None
-        )
+        candidate = getattr(retrieval_mod, "ChromaRetriever", None) or getattr(retrieval_mod, "get_retriever", None)
         if candidate:
             print(f"[verify] Found retriever candidate: {candidate}")
         else:
             print("[verify] Module loaded; pending class export from Member C.")
     except ModuleNotFoundError:
         print(f"[verify] '{agreed_path}' not yet delivered by Member C (Phase 2 pending).")
-        print(
-            f"[verify] Worker environment is verified: 'pipeline' is on PYTHONPATH and ready for import."
-        )
+        print(f"[verify] Worker environment is verified: 'pipeline' is on PYTHONPATH and ready for import.")
 
     print("[verify] Verification completed successfully.")
 
