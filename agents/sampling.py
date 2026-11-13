@@ -12,15 +12,21 @@ Usage:
 
     # Export time series CSV
     python -m agents.sampling --export-csv --db agents/out/sampling.db --out agents/out/sampling_timeseries.csv
+
+    # Print summary statistics
+    python -m agents.sampling --summary --db agents/out/sampling.db
 """
 
 from __future__ import annotations
 
 import argparse
+import csv
+import hashlib
 import json
 import logging
 import os
 import sqlite3
+import statistics
 import sys
 import time
 from datetime import datetime
@@ -224,8 +230,6 @@ def run_sampling_once(
             logger.info("No completed runs found")
             return 0
 
-        import hashlib
-
         threshold = int(sample_rate * 100)
         inserted = 0
 
@@ -271,8 +275,6 @@ def run_sampling_once(
         logger.info("No completed runs found")
         return 0
 
-    import hashlib
-
     threshold = int(sample_rate * 100)
     inserted = 0
 
@@ -316,29 +318,103 @@ def print_scores_table(db: SamplingDB) -> None:
         print("No samples in database")
         return
 
-    print(f"\n{'=' * 120}")
-    print(f"LIVE SAMPLING SCORES — {len(samples)} samples")
-    print(f"{'=' * 120}")
+    print("\n" + "=" * 120)
+    print("LIVE SAMPLING SCORES — {len(samples)} samples".format(len=len))
+    print("=" * 120)
     print(
-        f"{'Run ID':<35} {'Time':<20} {'Grounded':>8} {'Cites OK':>8} {'Claim Supp':>10} {'Quote VB':>8} {'Scorer':<8} {'Prompt':<8} {'Routing':<12}"
+        "{'Run ID':<35} {'Time':<20} {'Grounded':>8} {'Cites OK':>8} {'Claim Supp':>10} {'Quote VB':>8} {'Scorer':<8} {'Prompt':<8} {'Routing':<12}".format()
     )
     print("-" * 120)
     for s in samples:
         ts = s["timestamp"][:19].replace("T", " ")
         grounded = (
-            f"{s['groundedness_score']:.2f}" if s["groundedness_score"] is not None else "N/A"
+            "{s[groundedness_score]:.2f}".format(s=s) if s["groundedness_score"] is not None else "N/A"
         )
         cites = (
             "✓" if s["citation_resolve"] else ("✗" if s["citation_resolve"] is not None else "?")
         )
-        claim = f"{s['claim_support_score']:.2f}" if s["claim_support_score"] is not None else "N/A"
+        claim = "{s[claim_support_score]:.2f}".format(s=s) if s["claim_support_score"] is not None else "N/A"
         quote = "✓" if s["quote_verbatim"] else ("✗" if s["quote_verbatim"] is not None else "?")
         prompt = s["prompt_version"] or "N/A"
         routing = s["routing"] or "N/A"
         print(
-            f"{s['run_id']:<35} {ts:<20} {grounded:>8} {cites:>8} {claim:>10} {quote:>8} {s['scorer']:<8} {prompt:<8} {routing:<12}"
+            "{s[run_id]:<35} {ts:<20} {grounded:>8} {cites:>8} {claim:>10} {quote:>8} {s[scorer]:<8} {prompt:<8} {routing:<12}".format(
+                s=s, ts=ts, grounded=grounded, cites=cites, claim=claim, quote=quote, prompt=prompt, routing=routing
+            )
         )
-    print(f"{'=' * 120}\n")
+    print("=" * 120 + "\n")
+
+
+def print_summary_stats(db: SamplingDB) -> None:
+    """Print aggregate summary statistics."""
+    samples = db.get_all_samples()
+    if not samples:
+        print("No samples in database")
+        return
+
+    # Filter to only completed samples with scores
+    scored = [s for s in samples if s["groundedness_score"] is not None]
+    if not scored:
+        print("No scored samples available")
+        return
+
+    groundedness = [s["groundedness_score"] for s in scored]
+    claim_support = [s["claim_support_score"] for s in scored if s["claim_support_score"] is not None]
+    cites_resolved = sum(1 for s in scored if s["citation_resolve"])
+    quotes_verbatim = sum(1 for s in scored if s["quote_verbatim"])
+
+    print("\n" + "=" * 60)
+    print("SAMPLING SUMMARY — {len_scored} scored samples / {len_total} total".format(len_scored=len(scored), len_total=len(samples)))
+    print("=" * 60)
+    print("Groundedness:     mean={mean_g:.3f}, stdev={stdev_g:.3f}, min={min_g:.3f}, max={max_g:.3f}".format(
+        mean_g=statistics.mean(groundedness),
+        stdev_g=statistics.stdev(groundedness) if len(groundedness) > 1 else 0,
+        min_g=min(groundedness),
+        max_g=max(groundedness),
+    ))
+    if claim_support:
+        print("Claim Support:    mean={mean_c:.3f}, stdev={stdev_c:.3f}".format(
+            mean_c=statistics.mean(claim_support),
+            stdev_c=statistics.stdev(claim_support) if len(claim_support) > 1 else 0,
+        ))
+    else:
+        print("Claim Support:    N/A")
+    print("Citation Resolve: {cites}/{total} ({pct:.1f}%)".format(
+        cites=cites_resolved, total=len(scored), pct=cites_resolved/len(scored)*100 if scored else 0
+    ))
+    print("Quote Verbatim:   {quotes}/{total} ({pct:.1f}%)".format(
+        quotes=quotes_verbatim, total=len(scored), pct=quotes_verbatim/len(scored)*100 if scored else 0
+    ))
+
+    # By prompt version
+    by_prompt = {}
+    for s in scored:
+        pv = s["prompt_version"] or "unknown"
+        if pv not in by_prompt:
+            by_prompt[pv] = []
+        by_prompt[pv].append(s["groundedness_score"])
+
+    print("\nBy Prompt Version:")
+    for pv, scores in sorted(by_prompt.items()):
+        print("  {pv}: n={n}, groundedness_mean={mean:.3f}".format(
+            pv=pv, n=len(scores), mean=statistics.mean(scores)
+        ))
+
+    # By routing
+    by_routing = {}
+    for s in scored:
+        rt = s["routing"] or "unknown"
+        if rt not in by_routing:
+            by_routing[rt] = []
+        by_routing[rt].append(s["groundedness_score"])
+
+    print("\nBy Routing:")
+    for rt, scores in sorted(by_routing.items()):
+        print("  {rt}: n={n}, groundedness_mean={mean:.3f}".format(
+            rt=rt, n=len(scores), mean=statistics.mean(scores)
+        ))
+
+    print("=" * 60 + "\n")
 
 
 def export_timeseries_csv(db: SamplingDB, out_path: str) -> None:
@@ -350,8 +426,6 @@ def export_timeseries_csv(db: SamplingDB, out_path: str) -> None:
 
     out_file = Path(out_path)
     out_file.parent.mkdir(parents=True, exist_ok=True)
-
-    import csv
 
     fieldnames = [
         "run_id",
@@ -370,7 +444,7 @@ def export_timeseries_csv(db: SamplingDB, out_path: str) -> None:
         writer.writeheader()
         for s in samples:
             writer.writerow(s)
-    logger.info("Exported %d samples to %s", len(samples), out_file)
+    logger.info("Exported {len} samples to {out}".format(len=len(samples), out=out_file))
 
 
 # -----------------------------------------------------------------------------
@@ -398,6 +472,7 @@ def main() -> int:
     parser.add_argument(
         "--print", action="store_true", dest="print_table", help="Print scores table"
     )
+    parser.add_argument("--summary", action="store_true", help="Print summary statistics")
     parser.add_argument("--export-csv", action="store_true", help="Export time series CSV")
     parser.add_argument("--out", help="Output CSV path (for --export-csv)")
     parser.add_argument(
@@ -428,6 +503,10 @@ def main() -> int:
         print_scores_table(db)
         return 0
 
+    if args.summary:
+        print_summary_stats(db)
+        return 0
+
     if args.export_csv:
         if not args.out:
             parser.error("--out required with --export-csv")
@@ -440,7 +519,7 @@ def main() -> int:
 
     if args.daemon:
         logger.info(
-            "Starting sampling daemon (interval=%ds, rate=%.1f%%)", args.interval, args.rate * 100
+            "Starting sampling daemon (interval={interval}d, rate={rate:.1f}%)".format(interval=args.interval, rate=args.rate * 100)
         )
         try:
             while True:
