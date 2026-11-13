@@ -129,3 +129,74 @@ The flag exists for A/B evaluation; production should run with `on` to ensure re
 - `agents/graph.py`: Added `MODIFYING_PROVISION_SEARCH` flag + conditional wrap (Phase 5)
 - `prompts/assessor/v2.md`: Documented Step 3 as mandatory in protocol
 - `agents/CHANGES.md`: This file — failure diagnosis loop results
+---
+
+# Phase 6: Post-Merge Enhancements (Commits 9-19)
+
+## Commit 9: Add `verification_passed` to RunResult Contract
+
+**Files Modified:**
+- `shared/contracts.py` (line 97): Added `verification_passed: bool | None = None` field
+
+**Purpose:** Expose explicit verifier outcome in RunResult so batch evaluation and downstream consumers can directly access verification result without inferring from trace detail.
+
+## Commit 10: Fix Output Guardrail Pattern Gaps
+
+**Files Modified:**
+- `guardrails/output.py` (lines 32-39): Added patterns for CLA (Central Licensing Authority) and date-based submission claims
+
+**Patterns Added:**
+- `submitted to ... CLA|central licensing authority`
+- `filed with ... CLA|central licensing authority`
+- `submitted on YYYY-MM-DD`
+- `case/report was submitted on YYYY-MM-DD`
+
+**Impact:** All BLOCKED_OUTPUT_PHRASINGS test cases now correctly blocked.
+
+## Commit 11: Update Batch Runner to Use `verification_passed`
+
+**Files Modified:**
+- `agents/batch.py`: Use RunResult.verification_passed when available, fallback to trace inference
+
+**Impact:** Cleaner, more reliable verifier outcome extraction in batch comparison runs.
+
+## Commit 12: Add Batch Evaluation Unit Tests
+
+**Files Added:**
+- `agents/tests/test_batch.py` (8 test cases)
+
+**Coverage:**
+- `load_scenarios`: valid JSONL, invalid lines, empty files
+- `run_batch`: verification passed/failed/skipped with mocks
+- `print_summary` and `save_results` output validation
+
+## Commit 13: Documentation Update (This Entry)
+
+**Status:** All 171 tests pass (163 original + 8 new batch tests).
+
+---
+
+## Test Results Summary (Post-Merge)
+
+| Test Suite | Tests | Status |
+|------------|-------|--------|
+| agents/tests/ | 98 (+8) | ✅ All passed |
+| guardrails/tests/ | 44 | ✅ All passed |
+| llm/tests/ | 15 | ✅ All passed |
+| prompts/tests/ | 4 | ✅ All passed |
+| pipeline/tests/ | 10 | ✅ All passed |
+| **Total** | **171** | **✅ All passed** |
+
+---
+
+## Remaining Commits (14-19): Planned Enhancements
+
+| Commit | Focus Area |
+|--------|------------|
+| 14 | Linting/formatting configuration (ruff, black, mypy) |
+| 15 | CI/CD pipeline improvements |
+| 16 | Performance optimizations (caching, connection pooling) |
+| 17 | Security hardening (input validation, rate limiting) |
+| 18 | Code quality improvements (type hints, docstrings) |
+| 19 | Additional feature: Sampling CLI enhancements |
+
